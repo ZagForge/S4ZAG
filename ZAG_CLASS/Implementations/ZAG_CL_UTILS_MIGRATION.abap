@@ -96,7 +96,7 @@ CLASS zag_cl_utils_migration DEFINITION
           download_failed,
 
       get_tr_path
-        RETURNING 
+        RETURNING
           VALUE(yv_path) TYPE string,
 
       insert_obj_into_tr
@@ -221,8 +221,8 @@ CLASS ZAG_CL_UTILS_MIGRATION IMPLEMENTATION.
     ENDIF.
 
 
-    DATA(lv_path_server_cofiles) = get_tr_path( ) && '\cofiles\'.
-    DATA(lv_path_server_data)    = get_tr_path( ) && '\data\'.
+    DATA(lv_path_server_cofiles) = get_tr_path( ) && '/cofiles/'.
+    DATA(lv_path_server_data)    = get_tr_path( ) && '/data/'.
 
     DATA(lv_tr_cofiles) = condense( 'K' && xv_tr_number+4 && '.' && xv_tr_number(3) ).
     DATA(lv_tr_data)    = condense( 'R' && xv_tr_number+4 && '.' && xv_tr_number(3) ).
@@ -773,8 +773,8 @@ CLASS ZAG_CL_UTILS_MIGRATION IMPLEMENTATION.
     ENDIF.
 
 
-    DATA(lv_path_server_cofiles) = get_tr_path( ) && '\cofiles\'.
-    DATA(lv_path_server_data)    = get_tr_path( ) && '\data\'.
+    DATA(lv_path_server_cofiles) = get_tr_path( ) && '/cofiles/'.
+    DATA(lv_path_server_data)    = get_tr_path( ) && '/data/'.
 
 
     DATA(lv_tr_cofiles) = condense( 'K' && xv_tr_number+4 && '.' && xv_tr_number(3) ).
@@ -813,7 +813,7 @@ CLASS ZAG_CL_UTILS_MIGRATION IMPLEMENTATION.
     ).
 
     lv_ok = me->server_write(
-      xv_filename = |{ lv_path_server_data }{ lv_tr_cofiles }|
+      xv_filename = |{ lv_path_server_data }{ lv_tr_data }|
       xt_bin      = lt_data_bin
       xv_length   = lv_data_length
     ).
