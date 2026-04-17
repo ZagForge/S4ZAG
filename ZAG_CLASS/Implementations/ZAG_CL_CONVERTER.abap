@@ -33,7 +33,7 @@ CLASS zag_cl_converter DEFINITION
       c_initial_data    TYPE datum VALUE '00000000' ##NO_TEXT,
       c_initial_time    TYPE time  VALUE 000000     ##NO_TEXT,
       c_max_data        TYPE datum VALUE '99991231' ##NO_TEXT,
-      c_max_date_number TYPE int4 VALUE 2958465.
+      c_max_data_number TYPE int4 VALUE 2958465.
 
 
     " Methods
