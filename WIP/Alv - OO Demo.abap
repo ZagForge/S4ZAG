@@ -6,9 +6,18 @@ REPORT z_test_alv_dynamic.
 INCLUDE zag_include.
 
 *--------------------------------------------------------------------*
+* STRUTTURA DATI — C_COL colori riga/cella, C_STY stile/editabilità
+*--------------------------------------------------------------------*
+TYPES: BEGIN OF ts_mara_alv.
+         INCLUDE STRUCTURE mara.
+         TYPES: c_col TYPE lvc_t_scol,
+                c_sty TYPE lvc_t_styl.
+TYPES: END OF ts_mara_alv.
+
+*--------------------------------------------------------------------*
 * DATI GLOBALI
 *--------------------------------------------------------------------*
-DATA: gt_mara         TYPE TABLE OF mara,
+DATA: gt_mara         TYPE TABLE OF ts_mara_alv,
       gv_command_0100 TYPE sy-ucomm,
       go_alv_0100     TYPE REF TO cl_gui_alv_grid.
 
@@ -19,12 +28,24 @@ CONSTANTS: c_dynnr_0100 TYPE sy-dynnr VALUE '0100'.
 *--------------------------------------------------------------------*
 START-OF-SELECTION.
 
-  SELECT * FROM mara INTO TABLE @gt_mara UP TO 100 ROWS.
+  SELECT * FROM mara INTO CORRESPONDING FIELDS OF TABLE @gt_mara
+    UP TO 100 ROWS.
 
-  " Inizializza il framework
+  " Stili iniziali — MTART editabile, MBRSH read-only
+  " Colora in giallo le righe FERT
+  LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<row>).
+    lcl_alv_utils=>set_cell_editable( EXPORTING iv_fieldname = 'MTART'
+                                      CHANGING  ct_sty       = <row>-c_sty ).
+    lcl_alv_utils=>set_cell_readonly( EXPORTING iv_fieldname = 'MBRSH'
+                                      CHANGING  ct_sty       = <row>-c_sty ).
+    IF <row>-mtart = 'FERT'.
+      lcl_alv_utils=>set_row_color( EXPORTING iv_color = lcl_alv_utils=>tc_cell_col-yell
+                                    CHANGING  ct_col   = <row>-c_col ).
+    ENDIF.
+  ENDLOOP.
+
   PERFORM initialize_dynamic_alv.
 
-  " Registra l'ALV per lo screen 0100
   lcl_config_manager=>register_alv(
     iv_dynnr      = c_dynnr_0100
     iv_container  = 'CONTAINER_0100'
@@ -33,17 +54,15 @@ START-OF-SELECTION.
     iv_title      = 'ZTIT_0100'
   ).
 
-  " Configura MATNR come hotspot
   lcl_config_manager=>add_field_config( VALUE #(
     dynnr     = c_dynnr_0100
     fieldname = 'MATNR'
     hotspot   = abap_true
-    scrtext_s = 'Materiale'
+    scrtext_s = 'Mat.'
     scrtext_m = 'Materiale'
-    scrtext_l = 'Numero Materiale'
+    scrtext_l = 'N. Materiale'
   ) ).
 
-  " Passa i dati e apre lo screen
   DATA lr_data TYPE REF TO data.
   GET REFERENCE OF gt_mara INTO lr_data.
   PERFORM call_alv_screen USING c_dynnr_0100 lr_data.
@@ -53,8 +72,6 @@ START-OF-SELECTION.
 *--------------------------------------------------------------------*
 MODULE status_0100 OUTPUT.
   lcl_config_manager=>set_screen_properties( ).
-
-  " Crea l'ALV solo al primo PBO (quando il container è già attivo)
   go_alv_0100 = lcl_config_manager=>get_alv_ref( c_dynnr_0100 ).
   IF go_alv_0100 IS NOT BOUND.
     go_alv_0100 = lcl_alv_factory=>create_alv( c_dynnr_0100 ).
@@ -70,92 +87,158 @@ MODULE user_command_0100 INPUT.
   CLEAR gv_command_0100.
 
   CASE lv_command.
-    WHEN 'BACK' OR 'EXIT' OR 'CANC'
-      OR '&F03' OR '&F12' OR '&F15'.
+    WHEN 'BACK' OR '&F03'.
+      CHECK lcl_alv_utils=>confirm_unsaved_changes( c_dynnr_0100 ) = abap_true.
       LEAVE TO SCREEN 0.
+
+    WHEN 'EXIT' OR 'CANC' OR '&F15' OR '&F12'.
+      LEAVE PROGRAM.
+
     WHEN 'SAVE'.
       PERFORM save_data.
+
   ENDCASE.
 ENDMODULE.
 
 *--------------------------------------------------------------------*
-* IMPLEMENTAZIONE HOOK: hotspot click
-* Viene chiamato dall'include quando l'utente clicca su MATNR
+* HOOK: toolbar — pulsanti custom
+*--------------------------------------------------------------------*
+FORM build_dynamic_toolbar
+  CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
+
+  APPEND VALUE #( butn_type = '3' ) TO co_object->mt_toolbar.
+
+  APPEND VALUE #(
+    function  = 'ZSAVE'
+    icon      = lcl_alv_utils=>tc_icon-save
+    text      = 'Salva'
+    quickinfo = 'Salva modifiche'
+    butn_type = '0'
+  ) TO co_object->mt_toolbar.
+
+  APPEND VALUE #(
+    function  = 'ZDETAIL'
+    icon      = lcl_alv_utils=>tc_icon-info
+    text      = 'Dettaglio'
+    quickinfo = 'Mostra dettaglio riga'
+    butn_type = '0'
+  ) TO co_object->mt_toolbar.
+
+ENDFORM.
+
+*--------------------------------------------------------------------*
+* HOOK: user command — pulsanti toolbar custom
+*--------------------------------------------------------------------*
+FORM handle_custom_command USING iv_command TYPE sy-ucomm.
+  CASE iv_command.
+
+    WHEN 'ZSAVE'.
+      PERFORM save_data.
+
+    WHEN 'ZDETAIL'.
+      PERFORM show_detail.
+
+    WHEN OTHERS.
+  ENDCASE.
+ENDFORM.
+
+*--------------------------------------------------------------------*
+* HOOK: hotspot click su MATNR
 *--------------------------------------------------------------------*
 FORM handle_dynamic_hotspot USING is_row_id    TYPE lvc_s_row
                                   is_column_id TYPE lvc_s_col
                                   is_row_no    TYPE lvc_s_roid.
 
-  " is_row_id-index = indice riga nella tabella visualizzata
-  DATA lv_index TYPE i.
-  lv_index = is_row_id-index.
-
-  " Leggi la riga dalla tabella dati
-  READ TABLE gt_mara INDEX lv_index INTO DATA(ls_mara).
+  READ TABLE gt_mara INDEX is_row_id-index INTO DATA(ls_mara).
   CHECK sy-subrc EQ 0.
 
-  " Mostra campo cliccato e riga
-  DATA lv_msg TYPE string.
-  lv_msg = |Hotspot su colonna: { is_column_id-fieldname } | &&
-           |— Materiale: { ls_mara-matnr } | &&
-           |— Tipo: { ls_mara-mtart }|.
+  CASE is_column_id-fieldname.
+    WHEN 'MATNR'.
+      MESSAGE |Materiale: { ls_mara-matnr } — Tipo: { ls_mara-mtart }| TYPE 'I'.
+*     SET PARAMETER ID 'MAT' FIELD ls_mara-matnr.
+*     CALL TRANSACTION 'MM03' AND SKIP FIRST SCREEN.
 
-  MESSAGE lv_msg TYPE 'I'.
-
-  " Esempio: potresti aprire un dettaglio, navigare a MM03, ecc.
-  " CALL TRANSACTION 'MM03' AND SKIP FIRST SCREEN.
-
-ENDFORM.
-
-*--------------------------------------------------------------------*
-* IMPLEMENTAZIONE HOOK: user command custom
-*--------------------------------------------------------------------*
-FORM handle_custom_command USING iv_command TYPE sy-ucomm.
-  " Aggiungi qui la gestione di pulsanti custom della toolbar
-  CASE iv_command.
-    WHEN 'ZDETAIL'.
-      MESSAGE 'Funzione dettaglio non ancora implementata' TYPE 'I'.
+    WHEN OTHERS.
   ENDCASE.
+
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* IMPLEMENTAZIONE HOOK: toolbar custom
+* HOOK: data changed — validazioni custom
+* L'accumulo in gt_alv_config-changed_data è automatico nell'include.
+* Qui aggiungi solo validazioni con add_protocol_entry.
 *--------------------------------------------------------------------*
-FORM build_dynamic_toolbar CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
-  " Esempio: aggiunge un pulsante custom alla toolbar
-  DATA ls_button TYPE stb_button.
+FORM handle_dynamic_data_changed
+  CHANGING yr_data_changed TYPE REF TO cl_alv_changed_data_protocol.
 
-  ls_button-function  = 'ZDETAIL'.
-  ls_button-icon      = '@17@'.   " icona dettaglio
-  ls_button-quickinfo = 'Dettaglio materiale'.
-  ls_button-text      = 'Dettaglio'.
-  ls_button-disabled  = space.
+  LOOP AT yr_data_changed->mt_good_cells ASSIGNING FIELD-SYMBOL(<cell>).
+    CASE <cell>-fieldname.
+      WHEN 'MTART'.
+        IF <cell>-value IS INITIAL.
+          yr_data_changed->add_protocol_entry(
+            i_msgid     = 'M3'
+            i_msgno     = '305'
+            i_msgty     = 'E'
+            i_fieldname = 'MTART'
+          ).
+        ENDIF.
+    ENDCASE.
+  ENDLOOP.
 
-  APPEND ls_button TO co_object->mt_toolbar.
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* SALVATAGGIO DATI
+* SALVATAGGIO
 *--------------------------------------------------------------------*
 FORM save_data.
   CHECK go_alv_0100 IS BOUND.
+
+  " Chiude celle aperte e aggiorna gt_mara
   go_alv_0100->check_changed_data( ).
-  " ... logica di salvataggio su gt_mara ...
+
+  " gt_mara è già aggiornata — inserisci qui UPDATE/BAPI
+  LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<row>).
+*   UPDATE mara SET mtart = <row>-mtart
+*             WHERE matnr = <row>-matnr.
+  ENDLOOP.
+
+  lcl_config_manager=>clear_changed_data( c_dynnr_0100 ).
   MESSAGE 'Dati salvati' TYPE 'S'.
-  go_alv_0100->refresh_table_display( ).
+  lcl_alv_utils=>refresh( go_alv_0100 ).
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* NOTE PER SE51 - SCREEN 0100
+* DETTAGLIO RIGA — usa display_transposed_row di zag_cl_salv
+* Mostra la riga selezionata come tabella Campo / Valore
+*--------------------------------------------------------------------*
+FORM show_detail.
+
+  " Prendi la prima riga selezionata
+  DATA(lt_rows) = lcl_alv_utils=>get_selected_rows( go_alv_0100 ).
+  IF lt_rows IS INITIAL.
+    MESSAGE 'Seleziona almeno una riga' TYPE 'I'.
+    RETURN.
+  ENDIF.
+
+  DATA(lv_index) = lt_rows[ 1 ]-index.
+  READ TABLE gt_mara INDEX lv_index INTO DATA(ls_mara).
+  CHECK sy-subrc EQ 0.
+
+  MESSAGE s646(db) WITH 'Riga selezionata'.
+
+ENDFORM.
+
+*--------------------------------------------------------------------*
+* NOTE SE51 - SCREEN 0100
 *--------------------------------------------------------------------*
 * 1. Crea screen 0100 in SE51
-* 2. Aggiungi Custom Container: CONTAINER_0100
+* 2. Custom Container: CONTAINER_0100
 * 3. Flow Logic:
 *    PROCESS BEFORE OUTPUT.
 *      MODULE status_0100.
 *    PROCESS AFTER INPUT.
 *      MODULE user_command_0100.
-* 4. OK_CODE = GV_COMMAND_0100
+* 4. OK_CODE = GV_COMMAND_0100 (TYPE sy-ucomm)
 * 5. PF-STATUS 'ZPF_GENERIC': BACK(F3), EXIT(F15), CANC(F12), SAVE(Ctrl+S)
 * 6. TITLEBAR 'ZTIT_0100'
 *--------------------------------------------------------------------*
