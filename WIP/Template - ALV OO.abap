@@ -103,6 +103,9 @@
 *&---------------------------------------------------------------------*
 
 CLASS lcl_alv_event_dynamic DEFINITION DEFERRED.
+CLASS lcl_alv_factory       DEFINITION DEFERRED.
+CLASS lcl_config_manager    DEFINITION DEFERRED.
+CLASS lcl_alv_utils         DEFINITION DEFERRED.
 
 *--------------------------------------------------------------------*
 * TYPES
@@ -142,6 +145,7 @@ DATA: gt_alv_config    TYPE tt_alv_config,
       go_current_alv   TYPE REF TO cl_gui_alv_grid,
       go_event_handler TYPE REF TO lcl_alv_event_dynamic.
 
+
 *--------------------------------------------------------------------*
 * EVENT HANDLER CLASS
 *--------------------------------------------------------------------*
@@ -157,6 +161,7 @@ CLASS lcl_alv_event_dynamic DEFINITION.
       handle_data_changed FOR EVENT data_changed OF cl_gui_alv_grid
         IMPORTING er_data_changed.
 ENDCLASS.
+
 
 *--------------------------------------------------------------------*
 * ALV FACTORY CLASS
@@ -182,6 +187,7 @@ CLASS lcl_alv_factory DEFINITION.
         IMPORTING iv_dynnr TYPE sy-dynnr
         CHANGING  ct_fcat  TYPE lvc_t_fcat.
 ENDCLASS.
+
 
 *--------------------------------------------------------------------*
 * CONFIGURATION MANAGER CLASS
@@ -218,210 +224,8 @@ CLASS lcl_config_manager DEFINITION.
 ENDCLASS.
 
 *--------------------------------------------------------------------*
-* IMPLEMENTATIONS
+* HELPER CLASS
 *--------------------------------------------------------------------*
-
-CLASS lcl_config_manager IMPLEMENTATION.
-
-  METHOD register_alv.
-    APPEND VALUE ts_alv_config(
-      dynnr          = iv_dynnr
-      container_name = iv_container
-      structure_name = iv_structure
-      title_key      = iv_title
-      pf_status      = iv_pf_status
-    ) TO gt_alv_config.
-  ENDMETHOD.
-
-  METHOD add_field_config.
-    APPEND is_field_config TO gt_field_config.
-  ENDMETHOD.
-
-  METHOD get_alv_config.
-    READ TABLE gt_alv_config INTO rs_config WITH KEY dynnr = iv_dynnr.
-  ENDMETHOD.
-
-  METHOD get_alv_ref.
-    READ TABLE gt_alv_config INTO DATA(ls_config) WITH KEY dynnr = iv_dynnr.
-    CHECK sy-subrc EQ 0.
-    ro_alv = ls_config-alv_grid_ref.
-  ENDMETHOD.
-
-  METHOD has_unsaved_changes.
-    READ TABLE gt_alv_config INTO DATA(ls_config) WITH KEY dynnr = iv_dynnr.
-    CHECK sy-subrc EQ 0.
-    rv_dirty = xsdbool(
-      ls_config-changed_data  IS NOT INITIAL OR
-      ls_config-deleted_data  IS NOT INITIAL OR
-      ls_config-inserted_data IS NOT INITIAL
-    ).
-  ENDMETHOD.
-
-  METHOD clear_changed_data.
-    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
-    CHECK sy-subrc EQ 0.
-    CLEAR: <cfg>-changed_data, <cfg>-deleted_data, <cfg>-inserted_data.
-  ENDMETHOD.
-
-  METHOD set_screen_properties.
-    DATA(ls_config) = lcl_config_manager=>get_alv_config( sy-dynnr ).
-
-    IF ls_config-pf_status IS NOT INITIAL.
-      SET PF-STATUS ls_config-pf_status.
-    ENDIF.
-
-    IF ls_config-title_key IS NOT INITIAL.
-      SET TITLEBAR ls_config-title_key.
-    ENDIF.
-  ENDMETHOD.
-
-ENDCLASS.
-
-
-CLASS lcl_alv_factory IMPLEMENTATION.
-
-  METHOD create_alv.
-    DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
-
-    DATA(lo_container) = NEW cl_gui_custom_container(
-      container_name = ls_config-container_name
-    ).
-
-    ro_alv = NEW cl_gui_alv_grid( i_parent = lo_container ).
-
-    DATA(lt_fcat)   = build_fieldcat( iv_dynnr     = iv_dynnr
-                                      iv_structure = ls_config-structure_name ).
-    DATA(ls_layout) = setup_layout( ls_config-data_table_ref ).
-
-    FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE.
-    ASSIGN ls_config-data_table_ref->* TO <lt_table>.
-
-    ro_alv->set_table_for_first_display(
-      EXPORTING
-        i_buffer_active = 'X'
-        i_save          = 'A'
-        is_layout       = ls_layout
-      CHANGING
-        it_outtab       = <lt_table>
-        it_fieldcatalog = lt_fcat
-    ).
-
-    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
-    IF sy-subrc EQ 0.
-      <cfg>-alv_grid_ref  = ro_alv.
-      <cfg>-container_ref = lo_container.
-    ENDIF.
-
-    go_current_alv = ro_alv.
-    register_events( ro_alv ).
-
-  ENDMETHOD.
-
-  METHOD build_fieldcat.
-    CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
-      EXPORTING
-        i_structure_name = iv_structure
-      CHANGING
-        ct_fieldcat      = rt_fcat.
-
-    apply_field_config( EXPORTING iv_dynnr = iv_dynnr
-                        CHANGING  ct_fcat  = rt_fcat ).
-  ENDMETHOD.
-
-  METHOD apply_field_config.
-    LOOP AT ct_fcat ASSIGNING FIELD-SYMBOL(<ls_fcat>).
-      READ TABLE gt_field_config INTO DATA(ls_fc)
-        WITH KEY dynnr = iv_dynnr fieldname = <ls_fcat>-fieldname.
-      CHECK sy-subrc EQ 0.
-
-      IF ls_fc-scrtext_s IS NOT INITIAL. <ls_fcat>-scrtext_s = ls_fc-scrtext_s. ENDIF.
-      IF ls_fc-scrtext_m IS NOT INITIAL. <ls_fcat>-scrtext_m = ls_fc-scrtext_m. ENDIF.
-      IF ls_fc-scrtext_l IS NOT INITIAL. <ls_fcat>-scrtext_l = ls_fc-scrtext_l. ENDIF.
-
-      <ls_fcat>-hotspot = ls_fc-hotspot.
-      <ls_fcat>-icon    = ls_fc-icon_field.
-      <ls_fcat>-no_out  = ls_fc-hide_field.
-    ENDLOOP.
-  ENDMETHOD.
-
-  METHOD setup_layout.
-    rs_layout-zebra      = 'X'.
-    rs_layout-sel_mode   = 'A'.
-    rs_layout-cwidth_opt = 'X'.
-
-    CHECK ir_data_table IS BOUND.
-
-    FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE,
-                   <ls_row>   TYPE any.
-
-    ASSIGN ir_data_table->* TO <lt_table>.
-    CHECK sy-subrc EQ 0 AND lines( <lt_table> ) > 0.
-    ASSIGN <lt_table>[ 1 ] TO <ls_row>.
-
-    ASSIGN COMPONENT 'C_COL' OF STRUCTURE <ls_row> TO FIELD-SYMBOL(<color>).
-    IF sy-subrc EQ 0. rs_layout-ctab_fname  = 'C_COL'. ENDIF.
-
-    ASSIGN COMPONENT 'C_STY' OF STRUCTURE <ls_row> TO FIELD-SYMBOL(<style>).
-    IF sy-subrc EQ 0. rs_layout-stylefname = 'C_STY'. ENDIF.
-  ENDMETHOD.
-
-  METHOD register_events.
-    IF go_event_handler IS INITIAL.
-      go_event_handler = NEW lcl_alv_event_dynamic( ).
-    ENDIF.
-
-    SET HANDLER go_event_handler->handle_toolbar       FOR io_alv.
-    SET HANDLER go_event_handler->handle_user_command  FOR io_alv.
-    SET HANDLER go_event_handler->handle_hotspot_click FOR io_alv.
-    SET HANDLER go_event_handler->handle_data_changed  FOR io_alv.
-
-    " Registra eventi di editing
-    io_alv->register_edit_event( i_event_id = cl_gui_alv_grid=>mc_evt_enter ).
-    io_alv->register_edit_event(
-      EXPORTING i_event_id = cl_gui_alv_grid=>mc_evt_modified
-      EXCEPTIONS error = 1 OTHERS = 2
-    ).
-    io_alv->set_ready_for_input( i_ready_for_input = 1 ).
-
-  ENDMETHOD.
-
-ENDCLASS.
-
-
-CLASS lcl_alv_event_dynamic IMPLEMENTATION.
-
-  METHOD handle_user_command.
-    CASE e_ucomm.
-      WHEN '&REFRESH'.
-        CHECK go_current_alv IS BOUND.
-        go_current_alv->refresh_table_display( ).
-      WHEN OTHERS.
-        PERFORM handle_custom_command USING e_ucomm.
-    ENDCASE.
-  ENDMETHOD.
-
-  METHOD handle_toolbar.
-    PERFORM build_dynamic_toolbar CHANGING e_object.
-  ENDMETHOD.
-
-  METHOD handle_hotspot_click.
-    PERFORM handle_dynamic_hotspot USING e_row_id e_column_id es_row_no.
-  ENDMETHOD.
-
-  METHOD handle_data_changed.
-    " Accumula nelle config del dynnr corrente
-    ASSIGN gt_alv_config[ dynnr = sy-dynnr ] TO FIELD-SYMBOL(<cfg>).
-    CHECK sy-subrc EQ 0.
-    APPEND LINES OF er_data_changed->mt_good_cells    TO <cfg>-changed_data.
-    APPEND LINES OF er_data_changed->mt_deleted_rows  TO <cfg>-deleted_data.
-    APPEND LINES OF er_data_changed->mt_inserted_rows TO <cfg>-inserted_data.
-
-    " Chiama il hook nel report per validazioni custom
-    PERFORM handle_dynamic_data_changed CHANGING er_data_changed.
-  ENDMETHOD.
-
-ENDCLASS.
-
 CLASS lcl_alv_utils DEFINITION.
   PUBLIC SECTION.
     CONSTANTS:
@@ -515,6 +319,255 @@ CLASS lcl_alv_utils DEFINITION.
           cx_ai_system_fault.
 
 ENDCLASS.
+
+
+*--------------------------------------------------------------------*
+* IMPLEMENTATIONS
+*--------------------------------------------------------------------*
+
+CLASS lcl_alv_event_dynamic IMPLEMENTATION.
+
+  METHOD handle_user_command.
+    CASE e_ucomm.
+      WHEN '&REFRESH'.
+        CHECK go_current_alv IS BOUND.
+        go_current_alv->refresh_table_display( ).
+      WHEN OTHERS.
+        PERFORM handle_custom_command USING e_ucomm.
+    ENDCASE.
+  ENDMETHOD.
+
+  METHOD handle_toolbar.
+    PERFORM build_dynamic_toolbar CHANGING e_object.
+  ENDMETHOD.
+
+  METHOD handle_hotspot_click.
+    PERFORM handle_dynamic_hotspot USING e_row_id e_column_id es_row_no.
+  ENDMETHOD.
+
+  METHOD handle_data_changed.
+    " Accumula nelle config del dynnr corrente
+    ASSIGN gt_alv_config[ dynnr = sy-dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    APPEND LINES OF er_data_changed->mt_good_cells    TO <cfg>-changed_data.
+    APPEND LINES OF er_data_changed->mt_deleted_rows  TO <cfg>-deleted_data.
+    APPEND LINES OF er_data_changed->mt_inserted_rows TO <cfg>-inserted_data.
+
+    " Chiama il hook nel report per validazioni custom
+    PERFORM handle_dynamic_data_changed CHANGING er_data_changed.
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lcl_alv_factory IMPLEMENTATION.
+
+  METHOD create_alv.
+
+    DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
+
+    FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE.
+    ASSIGN ls_config-data_table_ref->* TO <lt_table>.
+
+    DATA(lo_container) = NEW cl_gui_custom_container(
+      container_name = ls_config-container_name
+    ).
+
+    ro_alv = NEW cl_gui_alv_grid( i_parent = lo_container ).
+
+
+    DATA(lt_fcat) = build_fieldcat( iv_dynnr     = iv_dynnr
+                                    iv_structure = ls_config-structure_name ).
+
+
+    DATA(ls_layout) = setup_layout( ls_config-data_table_ref ).
+
+
+
+    ro_alv->set_table_for_first_display(
+      EXPORTING
+        i_buffer_active = 'X'
+        i_save          = 'A'
+        is_layout       = ls_layout
+      CHANGING
+        it_outtab       = <lt_table>
+        it_fieldcatalog = lt_fcat
+    ).
+
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    IF sy-subrc EQ 0.
+      <cfg>-alv_grid_ref  = ro_alv.
+      <cfg>-container_ref = lo_container.
+    ENDIF.
+
+    go_current_alv = ro_alv.
+    register_events( ro_alv ).
+
+  ENDMETHOD.
+
+  METHOD build_fieldcat.
+
+
+    IF iv_structure IS NOT INITIAL.
+
+      CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
+        EXPORTING
+          i_structure_name = iv_structure
+        CHANGING
+          ct_fieldcat      = rt_fcat.
+
+    ELSE.
+
+
+      DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
+
+      FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE.
+      ASSIGN ls_config-data_table_ref->* TO <lt_table>.
+
+      TRY.
+          lcl_alv_utils=>get_fieldcat_from_data(
+              EXPORTING
+                xt_sap_table = <lt_table>
+              IMPORTING
+                yt_fcat      = rt_fcat
+          ).
+
+        CATCH cx_ai_system_fault INTO DATA(lx_sys_fault).
+          DATA(lv_exc) = lx_sys_fault->get_text( ).
+      ENDTRY.
+
+    ENDIF.
+
+    apply_field_config( EXPORTING iv_dynnr = iv_dynnr
+                        CHANGING  ct_fcat  = rt_fcat ).
+  ENDMETHOD.
+
+  METHOD apply_field_config.
+    LOOP AT ct_fcat ASSIGNING FIELD-SYMBOL(<ls_fcat>).
+
+      READ TABLE gt_field_config INTO DATA(ls_fc)
+        WITH KEY dynnr = iv_dynnr fieldname = <ls_fcat>-fieldname.
+      CHECK sy-subrc EQ 0.
+
+      IF ls_fc-scrtext_s IS NOT INITIAL. <ls_fcat>-scrtext_s = ls_fc-scrtext_s. ENDIF.
+      IF ls_fc-scrtext_m IS NOT INITIAL. <ls_fcat>-scrtext_m = ls_fc-scrtext_m. ENDIF.
+      IF ls_fc-scrtext_l IS NOT INITIAL. <ls_fcat>-scrtext_l = ls_fc-scrtext_l. ENDIF.
+
+      <ls_fcat>-hotspot = ls_fc-hotspot.
+      <ls_fcat>-icon    = ls_fc-icon_field.
+      <ls_fcat>-no_out  = ls_fc-hide_field.
+
+      IF <ls_fcat>-rollname NE 'ICON_D'.
+        <ls_fcat>-col_opt = 'X'.
+      ENDIF.
+
+      IF <ls_fcat>-rollname EQ 'MANDT'.
+        <ls_fcat>-no_out = 'X'.
+      ENDIF.
+
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD setup_layout.
+    rs_layout-zebra      = 'X'.
+    rs_layout-sel_mode   = 'A'.
+    rs_layout-cwidth_opt = 'X'.
+
+    CHECK ir_data_table IS BOUND.
+
+    FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE,
+                   <ls_row>   TYPE any.
+
+    ASSIGN ir_data_table->* TO <lt_table>.
+    CHECK sy-subrc EQ 0 AND lines( <lt_table> ) > 0.
+    ASSIGN <lt_table>[ 1 ] TO <ls_row>.
+
+    ASSIGN COMPONENT 'C_COL' OF STRUCTURE <ls_row> TO FIELD-SYMBOL(<color>).
+    IF sy-subrc EQ 0. rs_layout-ctab_fname  = 'C_COL'. ENDIF.
+
+    ASSIGN COMPONENT 'C_STY' OF STRUCTURE <ls_row> TO FIELD-SYMBOL(<style>).
+    IF sy-subrc EQ 0. rs_layout-stylefname = 'C_STY'. ENDIF.
+  ENDMETHOD.
+
+  METHOD register_events.
+    IF go_event_handler IS INITIAL.
+      go_event_handler = NEW lcl_alv_event_dynamic( ).
+    ENDIF.
+
+    SET HANDLER go_event_handler->handle_toolbar       FOR io_alv.
+    SET HANDLER go_event_handler->handle_user_command  FOR io_alv.
+    SET HANDLER go_event_handler->handle_hotspot_click FOR io_alv.
+    SET HANDLER go_event_handler->handle_data_changed  FOR io_alv.
+
+    " Registra eventi di editing
+    io_alv->register_edit_event( i_event_id = cl_gui_alv_grid=>mc_evt_enter ).
+    io_alv->register_edit_event(
+      EXPORTING i_event_id = cl_gui_alv_grid=>mc_evt_modified
+      EXCEPTIONS error = 1 OTHERS = 2
+    ).
+    io_alv->set_ready_for_input( i_ready_for_input = 1 ).
+
+  ENDMETHOD.
+
+ENDCLASS.
+
+
+CLASS lcl_config_manager IMPLEMENTATION.
+
+  METHOD register_alv.
+    APPEND VALUE ts_alv_config(
+      dynnr          = iv_dynnr
+      container_name = iv_container
+      structure_name = iv_structure
+      title_key      = iv_title
+      pf_status      = iv_pf_status
+    ) TO gt_alv_config.
+  ENDMETHOD.
+
+  METHOD add_field_config.
+    APPEND is_field_config TO gt_field_config.
+  ENDMETHOD.
+
+  METHOD get_alv_config.
+    READ TABLE gt_alv_config INTO rs_config WITH KEY dynnr = iv_dynnr.
+  ENDMETHOD.
+
+  METHOD get_alv_ref.
+    READ TABLE gt_alv_config INTO DATA(ls_config) WITH KEY dynnr = iv_dynnr.
+    CHECK sy-subrc EQ 0.
+    ro_alv = ls_config-alv_grid_ref.
+  ENDMETHOD.
+
+  METHOD has_unsaved_changes.
+    READ TABLE gt_alv_config INTO DATA(ls_config) WITH KEY dynnr = iv_dynnr.
+    CHECK sy-subrc EQ 0.
+    rv_dirty = xsdbool(
+      ls_config-changed_data  IS NOT INITIAL OR
+      ls_config-deleted_data  IS NOT INITIAL OR
+      ls_config-inserted_data IS NOT INITIAL
+    ).
+  ENDMETHOD.
+
+  METHOD clear_changed_data.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    CLEAR: <cfg>-changed_data, <cfg>-deleted_data, <cfg>-inserted_data.
+  ENDMETHOD.
+
+  METHOD set_screen_properties.
+    DATA(ls_config) = lcl_config_manager=>get_alv_config( sy-dynnr ).
+
+    IF ls_config-pf_status IS NOT INITIAL.
+      SET PF-STATUS ls_config-pf_status.
+    ENDIF.
+
+    IF ls_config-title_key IS NOT INITIAL.
+      SET TITLEBAR ls_config-title_key.
+    ENDIF.
+  ENDMETHOD.
+
+ENDCLASS.
+
 
 CLASS lcl_alv_utils IMPLEMENTATION.
 
@@ -675,6 +728,7 @@ CLASS lcl_alv_utils IMPLEMENTATION.
   ENDMETHOD.
 
 ENDCLASS.
+
 
 *--------------------------------------------------------------------*
 * FORMS
