@@ -2,31 +2,6 @@
 *& Include          ZAG_INCLUDE_DYNAMIC
 *&---------------------------------------------------------------------*
 
-" Usage:
-" Inizializza
-*PERFORM initialize_dynamic_alv.
-*
-*" Registra l'ALV (dynnr, nome container sullo screen, struttura dati)
-*lcl_config_manager=>register_alv(
-*  iv_dynnr      = '0100'
-*  iv_container  = 'CONTAINER_0100'
-*  iv_structure  = 'MARA'
-*).
-*
-*" Configura i campi (opzionale)
-*lcl_config_manager=>add_field_config( VALUE #(
-*  dynnr     = '0100'
-*  fieldname = 'MATNR'
-*  col_pos   = 1
-*  hotspot   = abap_true
-*) ).
-*
-*" Chiama lo screen con i dati
-*DATA lr_data TYPE REF TO data.
-*GET REFERENCE OF gt_mara INTO lr_data.
-*
-*PERFORM call_alv_screen USING '0100' lr_data.
-
 CLASS lcl_alv_event_dynamic DEFINITION DEFERRED.
 
 *--------------------------------------------------------------------*
@@ -76,9 +51,6 @@ CLASS lcl_alv_event_dynamic DEFINITION.
         IMPORTING e_ucomm,
       handle_hotspot_click FOR EVENT hotspot_click OF cl_gui_alv_grid
         IMPORTING e_row_id e_column_id es_row_no.
-  PRIVATE SECTION.
-    CLASS-METHODS:
-      get_current_config RETURNING VALUE(rs_config) TYPE ts_alv_config.
 ENDCLASS.
 
 *--------------------------------------------------------------------*
@@ -126,6 +98,10 @@ CLASS lcl_config_manager DEFINITION.
         IMPORTING iv_dynnr         TYPE sy-dynnr
         RETURNING VALUE(rs_config) TYPE ts_alv_config,
 
+      get_alv_ref
+        IMPORTING iv_dynnr       TYPE sy-dynnr
+        RETURNING VALUE(ro_alv)  TYPE REF TO cl_gui_alv_grid,
+
       set_screen_properties.
 ENDCLASS.
 
@@ -153,8 +129,13 @@ CLASS lcl_config_manager IMPLEMENTATION.
     READ TABLE gt_alv_config INTO rs_config WITH KEY dynnr = iv_dynnr.
   ENDMETHOD.
 
-  METHOD set_screen_properties.
+  METHOD get_alv_ref.
+    READ TABLE gt_alv_config INTO DATA(ls_config) WITH KEY dynnr = iv_dynnr.
+    CHECK sy-subrc EQ 0.
+    ro_alv = ls_config-alv_grid_ref.
+  ENDMETHOD.
 
+  METHOD set_screen_properties.
     DATA(ls_config) = lcl_config_manager=>get_alv_config( sy-dynnr ).
 
     IF ls_config-pf_status IS NOT INITIAL.
@@ -164,7 +145,6 @@ CLASS lcl_config_manager IMPLEMENTATION.
     IF ls_config-title_key IS NOT INITIAL.
       SET TITLEBAR ls_config-title_key.
     ENDIF.
-
   ENDMETHOD.
 
 ENDCLASS.
@@ -175,12 +155,15 @@ CLASS lcl_alv_factory IMPLEMENTATION.
   METHOD create_alv.
     DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
 
+    " Crea container
     DATA(lo_container) = NEW cl_gui_custom_container(
       container_name = ls_config-container_name
     ).
 
+    " Crea ALV
     ro_alv = NEW cl_gui_alv_grid( i_parent = lo_container ).
 
+    " Fieldcat e layout
     DATA(lt_fcat)   = build_fieldcat( iv_dynnr     = iv_dynnr
                                       iv_structure = ls_config-structure_name ).
     DATA(ls_layout) = setup_layout( ls_config-data_table_ref ).
@@ -198,6 +181,15 @@ CLASS lcl_alv_factory IMPLEMENTATION.
         it_fieldcatalog = lt_fcat
     ).
 
+    " Salva le reference nella config
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    IF sy-subrc EQ 0.
+      <cfg>-alv_grid_ref  = ro_alv.
+      <cfg>-container_ref = lo_container.
+    ENDIF.
+
+    " Aggiorna il puntatore globale e registra eventi
+    go_current_alv = ro_alv.
     register_events( ro_alv ).
 
   ENDMETHOD.
@@ -218,7 +210,6 @@ CLASS lcl_alv_factory IMPLEMENTATION.
       READ TABLE gt_field_config INTO DATA(ls_fc)
         WITH KEY dynnr = iv_dynnr fieldname = <ls_fcat>-fieldname.
       CHECK sy-subrc EQ 0.
-
 
       IF ls_fc-scrtext_s IS NOT INITIAL. <ls_fcat>-scrtext_s = ls_fc-scrtext_s. ENDIF.
       IF ls_fc-scrtext_m IS NOT INITIAL. <ls_fcat>-scrtext_m = ls_fc-scrtext_m. ENDIF.
@@ -269,6 +260,7 @@ CLASS lcl_alv_event_dynamic IMPLEMENTATION.
   METHOD handle_user_command.
     CASE e_ucomm.
       WHEN '&REFRESH'.
+        CHECK go_current_alv IS BOUND.
         go_current_alv->refresh_table_display( ).
       WHEN OTHERS.
         PERFORM handle_custom_command USING e_ucomm.
@@ -280,11 +272,8 @@ CLASS lcl_alv_event_dynamic IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD handle_hotspot_click.
+    " Recupera la riga cliccata e chiama il FORM del programma chiamante
     PERFORM handle_dynamic_hotspot USING e_row_id e_column_id es_row_no.
-  ENDMETHOD.
-
-  METHOD get_current_config.
-    READ TABLE gt_alv_config INTO rs_config WITH KEY dynnr = sy-dynnr.
   ENDMETHOD.
 
 ENDCLASS.
@@ -297,30 +286,30 @@ FORM initialize_dynamic_alv.
   CLEAR: gt_alv_config, gt_field_config, go_current_alv, go_event_handler.
 ENDFORM.
 
+" Prepara la config e apre lo screen.
+" La creazione fisica dell'ALV avviene nel PBO tramite lcl_alv_factory=>create_alv.
 FORM call_alv_screen USING iv_dynnr    TYPE sy-dynnr
                            ir_data_ref TYPE REF TO data.
 
-  " Store data reference in config before creating ALV
   ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<config>).
   IF sy-subrc EQ 0.
     <config>-data_table_ref = ir_data_ref.
   ENDIF.
 
-  go_current_alv = lcl_alv_factory=>create_alv( iv_dynnr ).
-
   CALL SCREEN iv_dynnr.
 ENDFORM.
 
+" Hook: logica custom per user command (implementa nel programma chiamante)
 FORM handle_custom_command USING iv_command TYPE sy-ucomm.
-  " Implement custom command logic here
 ENDFORM.
 
+" Hook: toolbar custom (implementa nel programma chiamante)
 FORM build_dynamic_toolbar CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
-  " Implement dynamic toolbar logic here
 ENDFORM.
 
+" Hook: hotspot click (implementa nel programma chiamante)
+" Usa e_row_id-index per leggere la riga dalla tua tabella dati
 FORM handle_dynamic_hotspot USING is_row_id    TYPE lvc_s_row
                                   is_column_id TYPE lvc_s_col
                                   is_row_no    TYPE lvc_s_roid.
-  " Implement hotspot logic here
 ENDFORM.
