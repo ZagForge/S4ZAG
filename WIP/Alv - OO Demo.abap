@@ -3,15 +3,19 @@
 *&---------------------------------------------------------------------*
 REPORT z_test_alv_dynamic.
 
-INCLUDE zag_include.
+INCLUDE zag_include.   " <-- aggiornato
 
 *--------------------------------------------------------------------*
-* STRUTTURA DATI — C_COL colori riga/cella, C_STY stile/editabilità
+* STRUTTURA DATI
 *--------------------------------------------------------------------*
 TYPES: BEGIN OF ts_mara_alv.
-         INCLUDE STRUCTURE mara.
-         TYPES: c_col TYPE lvc_t_scol,
-                c_sty TYPE lvc_t_styl.
+TYPES: matnr TYPE mara-matnr,
+       mtart TYPE mara-mtart,
+       mbrsh TYPE mara-mbrsh,
+       ferth TYPE mara-ferth.
+TYPES: icon  TYPE icon_d,
+       c_col TYPE lvc_t_scol,
+       c_sty TYPE lvc_t_styl.
 TYPES: END OF ts_mara_alv.
 
 *--------------------------------------------------------------------*
@@ -28,41 +32,96 @@ CONSTANTS: c_dynnr_0100 TYPE sy-dynnr VALUE '0100'.
 *--------------------------------------------------------------------*
 START-OF-SELECTION.
 
-  SELECT * FROM mara INTO CORRESPONDING FIELDS OF TABLE @gt_mara
+  SELECT matnr, mtart, mbrsh, ferth
+    FROM mara
+    INTO CORRESPONDING FIELDS OF TABLE @gt_mara
     UP TO 100 ROWS.
 
-  " Stili iniziali — MTART editabile, MBRSH read-only
-  " Colora in giallo le righe FERT
+  " Stili e colori iniziali
   LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<row>).
-    lcl_alv_utils=>set_cell_editable( EXPORTING iv_fieldname = 'MTART'
-                                      CHANGING  ct_sty       = <row>-c_sty ).
-    lcl_alv_utils=>set_cell_readonly( EXPORTING iv_fieldname = 'MBRSH'
-                                      CHANGING  ct_sty       = <row>-c_sty ).
+    <row>-icon = lcl_alv_utils=>tc_icon-green.
+
+    lcl_alv_utils=>set_cell_editable(
+      EXPORTING iv_fieldname = 'MTART'
+      CHANGING  ct_sty       = <row>-c_sty ).
+
+    lcl_alv_utils=>set_cell_readonly(
+      EXPORTING iv_fieldname = 'MBRSH'
+      CHANGING  ct_sty       = <row>-c_sty ).
+
     IF <row>-mtart = 'FERT'.
-      lcl_alv_utils=>set_row_color( EXPORTING iv_color = lcl_alv_utils=>tc_cell_col-yell
-                                    CHANGING  ct_col   = <row>-c_col ).
+      lcl_alv_utils=>set_row_color(
+        EXPORTING iv_color = lcl_alv_utils=>tc_cell_col-yell
+        CHANGING  ct_col   = <row>-c_col ).
     ENDIF.
   ENDLOOP.
 
   PERFORM initialize_dynamic_alv.
 
   lcl_config_manager=>register_alv(
-    iv_dynnr      = c_dynnr_0100
-    iv_container  = 'CONTAINER_0100'
-    iv_structure  = 'MARA'
-    iv_pf_status  = 'ZPF_GENERIC'
-    iv_title      = 'ZTIT_0100'
+    iv_dynnr     = c_dynnr_0100
+    iv_container = 'CONTAINER_0100'
+    iv_structure = ''              " struttura custom: fieldcat da runtime
+    iv_pf_status = 'ZPF_GENERIC'
+    iv_title     = 'ZTIT_0100'
   ).
 
+  " Configurazione campi
   lcl_config_manager=>add_field_config( VALUE #(
-    dynnr     = c_dynnr_0100
-    fieldname = 'MATNR'
-    hotspot   = abap_true
-    scrtext_s = 'Mat.'
-    scrtext_m = 'Materiale'
-    scrtext_l = 'N. Materiale'
+    dynnr      = c_dynnr_0100
+    fieldname  = 'MATNR'
+    hotspot    = abap_true
+    scrtext_s  = 'Mat.'
+    scrtext_m  = 'Materiale'
+    scrtext_l  = 'N. Materiale'
+  ) ).
+  lcl_config_manager=>add_field_config( VALUE #(
+    dynnr      = c_dynnr_0100
+    fieldname  = 'ICON'
+    icon_field = abap_true
+    scrtext_s  = ''
+    scrtext_m  = ''
+    scrtext_l  = ''
+  ) ).
+  " Nascondi campi tecnici ALV
+  lcl_config_manager=>add_field_config( VALUE #(
+    dynnr      = c_dynnr_0100
+    fieldname  = 'C_COL'
+    hide_field = abap_true
+  ) ).
+  lcl_config_manager=>add_field_config( VALUE #(
+    dynnr      = c_dynnr_0100
+    fieldname  = 'C_STY'
+    hide_field = abap_true
   ) ).
 
+  " Bottoni toolbar custom — sostituisce FORM build_dynamic_toolbar
+  lcl_config_manager=>add_toolbar_button(
+    iv_dynnr  = c_dynnr_0100
+    is_button = VALUE #( butn_type = '3' )          " separatore
+  ).
+  lcl_config_manager=>add_toolbar_button(
+    iv_dynnr  = c_dynnr_0100
+    is_button = VALUE #(
+      function  = 'ZSAVE'
+      icon      = lcl_alv_utils=>tc_icon-save
+      text      = 'Salva'
+      quickinfo = 'Salva modifiche'
+      butn_type = '0'
+    )
+  ).
+  lcl_config_manager=>add_toolbar_button(
+    iv_dynnr  = c_dynnr_0100
+    is_button = VALUE #(
+      function  = 'ZDETAIL'
+      icon      = lcl_alv_utils=>tc_icon-info
+      text      = 'Dettaglio'
+      quickinfo = 'Mostra dettaglio riga'
+      butn_type = '0'
+    )
+  ).
+
+  " Passa dati e apri screen
   DATA lr_data TYPE REF TO data.
   GET REFERENCE OF gt_mara INTO lr_data.
   PERFORM call_alv_screen USING c_dynnr_0100 lr_data.
@@ -101,53 +160,25 @@ MODULE user_command_0100 INPUT.
 ENDMODULE.
 
 *--------------------------------------------------------------------*
-* HOOK: toolbar — pulsanti custom
-*--------------------------------------------------------------------*
-FORM build_dynamic_toolbar
-  CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
-
-  APPEND VALUE #( butn_type = '3' ) TO co_object->mt_toolbar.
-
-  APPEND VALUE #(
-    function  = 'ZSAVE'
-    icon      = lcl_alv_utils=>tc_icon-save
-    text      = 'Salva'
-    quickinfo = 'Salva modifiche'
-    butn_type = '0'
-  ) TO co_object->mt_toolbar.
-
-  APPEND VALUE #(
-    function  = 'ZDETAIL'
-    icon      = lcl_alv_utils=>tc_icon-info
-    text      = 'Dettaglio'
-    quickinfo = 'Mostra dettaglio riga'
-    butn_type = '0'
-  ) TO co_object->mt_toolbar.
-
-ENDFORM.
-
-*--------------------------------------------------------------------*
-* HOOK: user command — pulsanti toolbar custom
+* HOOK: user command
 *--------------------------------------------------------------------*
 FORM handle_custom_command USING iv_command TYPE sy-ucomm.
   CASE iv_command.
-
     WHEN 'ZSAVE'.
       PERFORM save_data.
-
     WHEN 'ZDETAIL'.
       PERFORM show_detail.
-
     WHEN OTHERS.
   ENDCASE.
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* HOOK: hotspot click su MATNR
+* HOOK: hotspot click
 *--------------------------------------------------------------------*
-FORM handle_dynamic_hotspot USING is_row_id    TYPE lvc_s_row
-                                  is_column_id TYPE lvc_s_col
-                                  is_row_no    TYPE lvc_s_roid.
+FORM handle_dynamic_hotspot
+  USING is_row_id    TYPE lvc_s_row
+        is_column_id TYPE lvc_s_col
+        is_row_no    TYPE lvc_s_roid.
 
   READ TABLE gt_mara INDEX is_row_id-index INTO DATA(ls_mara).
   CHECK sy-subrc EQ 0.
@@ -157,16 +188,13 @@ FORM handle_dynamic_hotspot USING is_row_id    TYPE lvc_s_row
       MESSAGE |Materiale: { ls_mara-matnr } — Tipo: { ls_mara-mtart }| TYPE 'I'.
 *     SET PARAMETER ID 'MAT' FIELD ls_mara-matnr.
 *     CALL TRANSACTION 'MM03' AND SKIP FIRST SCREEN.
-
     WHEN OTHERS.
   ENDCASE.
 
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* HOOK: data changed — validazioni custom
-* L'accumulo in gt_alv_config-changed_data è automatico nell'include.
-* Qui aggiungi solo validazioni con add_protocol_entry.
+* HOOK: data changed — validazioni
 *--------------------------------------------------------------------*
 FORM handle_dynamic_data_changed
   CHANGING yr_data_changed TYPE REF TO cl_alv_changed_data_protocol.
@@ -193,13 +221,16 @@ ENDFORM.
 FORM save_data.
   CHECK go_alv_0100 IS BOUND.
 
-  " Chiude celle aperte e aggiorna gt_mara
   go_alv_0100->check_changed_data( ).
 
-  " gt_mara è già aggiornata — inserisci qui UPDATE/BAPI
+  " Applica changed_data accumulata nella config a gt_mara
+  lcl_alv_utils=>apply_changed_data(
+    EXPORTING iv_dynnr = c_dynnr_0100
+    CHANGING  ct_table = gt_mara
+  ).
+
   LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<row>).
-*   UPDATE mara SET mtart = <row>-mtart
-*             WHERE matnr = <row>-matnr.
+*   UPDATE mara SET mtart = <row>-mtart WHERE matnr = <row>-matnr.
   ENDLOOP.
 
   lcl_config_manager=>clear_changed_data( c_dynnr_0100 ).
@@ -208,37 +239,17 @@ FORM save_data.
 ENDFORM.
 
 *--------------------------------------------------------------------*
-* DETTAGLIO RIGA — usa display_transposed_row di zag_cl_salv
-* Mostra la riga selezionata come tabella Campo / Valore
+* DETTAGLIO RIGA
 *--------------------------------------------------------------------*
 FORM show_detail.
-
-  " Prendi la prima riga selezionata
   DATA(lt_rows) = lcl_alv_utils=>get_selected_rows( go_alv_0100 ).
   IF lt_rows IS INITIAL.
     MESSAGE 'Seleziona almeno una riga' TYPE 'I'.
     RETURN.
   ENDIF.
 
-  DATA(lv_index) = lt_rows[ 1 ]-index.
-  READ TABLE gt_mara INDEX lv_index INTO DATA(ls_mara).
+  READ TABLE gt_mara INDEX lt_rows[ 1 ]-index INTO DATA(ls_mara).
   CHECK sy-subrc EQ 0.
 
   MESSAGE s646(db) WITH 'Riga selezionata'.
-
 ENDFORM.
-
-*--------------------------------------------------------------------*
-* NOTE SE51 - SCREEN 0100
-*--------------------------------------------------------------------*
-* 1. Crea screen 0100 in SE51
-* 2. Custom Container: CONTAINER_0100
-* 3. Flow Logic:
-*    PROCESS BEFORE OUTPUT.
-*      MODULE status_0100.
-*    PROCESS AFTER INPUT.
-*      MODULE user_command_0100.
-* 4. OK_CODE = GV_COMMAND_0100 (TYPE sy-ucomm)
-* 5. PF-STATUS 'ZPF_GENERIC': BACK(F3), EXIT(F15), CANC(F12), SAVE(Ctrl+S)
-* 6. TITLEBAR 'ZTIT_0100'
-*--------------------------------------------------------------------*

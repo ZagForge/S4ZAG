@@ -4,9 +4,10 @@
 *
 *& DESCRIZIONE:
 *&   Framework generico per ALV OO su dynpro custom.
-*&   Gestisce creazione container, fieldcat, layout, eventi (toolbar,
-*&   user command, hotspot, data_changed) tramite hook FORM nel
-*&   programma chiamante.
+*&   Gestisce creazione container, fieldcat, layout, sort, variant,
+*&   print_params, toolbar_excluding, toolbar_buttons ed eventi
+*&   (toolbar, user command, hotspot, data_changed) tramite hook FORM
+*&   nel programma chiamante.
 *&
 *&---------------------------------------------------------------------*
 *& UTILIZZO - PASSI OBBLIGATORI
@@ -46,13 +47,57 @@
 *&        scrtext_l  = 'N. Materiale'
 *&      ) ).
 *&
-*& 5) Passa i dati e apri lo screen:
+*& 5) Sort — opzionale:
+*&
+*&      lcl_config_manager=>add_sort(
+*&        iv_dynnr = '0100'
+*&        is_sort  = VALUE #( spos = 1 fieldname = 'MATNR' subtot = 'X' )
+*&      ).
+*&
+*& 6) Variant — opzionale:
+*&
+*&      lcl_config_manager=>set_variant(
+*&        iv_dynnr    = '0100'
+*&        iv_report   = sy-repid
+*&        iv_username = sy-uname
+*&      ).
+*&      " Per variante specifica:
+*&      " iv_variant = '/DEFAULT'
+*&
+*& 7) Print params — opzionale:
+*&
+*&      lcl_config_manager=>set_print_params(
+*&        iv_dynnr  = '0100'
+*&        is_print  = VALUE #( print = 'X' )
+*&      ).
+*&
+*& 8) Toolbar excluding — opzionale:
+*&
+*&      lcl_config_manager=>add_toolbar_exclude(
+*&        iv_dynnr = '0100'
+*&        iv_func  = cl_gui_alv_grid=>mc_fc_loc_insert_row
+*&      ).
+*&
+*& 9) Bottoni toolbar custom — opzionale:
+*&
+*&      lcl_config_manager=>add_toolbar_button(
+*&        iv_dynnr  = '0100'
+*&        is_button = VALUE #(
+*&          function  = '&MYACTION'
+*&          icon      = lcl_alv_utils=>tc_icon-exec
+*&          text      = 'Azione'
+*&          quickinfo = 'Azione custom'
+*&          butn_type = '0'
+*&        )
+*&      ).
+*&
+*& 10) Passa i dati e apri lo screen:
 *&
 *&      DATA lr_data TYPE REF TO data.
 *&      GET REFERENCE OF gt_mia_tabella INTO lr_data.
 *&      PERFORM call_alv_screen USING '0100' lr_data.
 *&
-*& 6) PBO dello screen — crea ALV solo al primo PBO:
+*& 11) PBO dello screen — crea ALV solo al primo PBO:
 *&
 *&      MODULE status_0100 OUTPUT.
 *&        lcl_config_manager=>set_screen_properties( ).
@@ -62,7 +107,7 @@
 *&        ENDIF.
 *&      ENDMODULE.
 *&
-*& 7) PAI dello screen — gestisci comandi e salvataggio.
+*& 12) PAI dello screen — gestisci comandi e salvataggio.
 *&
 *&---------------------------------------------------------------------*
 *& HOOK FORM — da implementare nel programma chiamante
@@ -71,11 +116,7 @@
 *&   FORM handle_custom_command USING iv_command TYPE sy-ucomm.
 *&   ENDFORM.
 *&
-*&   FORM build_dynamic_toolbar
-*&     CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
-*&   ENDFORM.
-*&
-*&   " is_row_id-index     = indice riga
+*&   " is_row_id-index        = indice riga
 *&   " is_column_id-fieldname = campo cliccato
 *&   FORM handle_dynamic_hotspot
 *&     USING is_row_id    TYPE lvc_s_row
@@ -111,17 +152,24 @@ CLASS lcl_alv_utils         DEFINITION DEFERRED.
 * TYPES
 *--------------------------------------------------------------------*
 TYPES: BEGIN OF ts_alv_config,
-         dynnr          TYPE sy-dynnr,
-         container_name TYPE scrfname,
-         structure_name TYPE dd02l-tabname,
-         data_table_ref TYPE REF TO data,
-         alv_grid_ref   TYPE REF TO cl_gui_alv_grid,
-         container_ref  TYPE REF TO cl_gui_custom_container,
-         title_key      TYPE string,
-         pf_status      TYPE string,
-         changed_data   TYPE lvc_t_modi,
-         deleted_data   TYPE lvc_t_moce,
-         inserted_data  TYPE lvc_t_moce,
+         dynnr           TYPE sy-dynnr,
+         container_name  TYPE scrfname,
+         structure_name  TYPE dd02l-tabname,
+         data_table_ref  TYPE REF TO data,
+         alv_grid_ref    TYPE REF TO cl_gui_alv_grid,
+         container_ref   TYPE REF TO cl_gui_custom_container,
+         title_key       TYPE string,
+         pf_status       TYPE string,
+         " — dati modificati —
+         changed_data    TYPE lvc_t_modi,
+         deleted_data    TYPE lvc_t_moce,
+         inserted_data   TYPE lvc_t_moce,
+         " — configurazione display —
+         sort            TYPE lvc_t_sort,
+         variant         TYPE disvariant,
+         print_params    TYPE lvc_s_prnt,
+         toolbar_excl    TYPE ui_functions,
+         toolbar_buttons TYPE ttb_button,
        END OF ts_alv_config,
        tt_alv_config TYPE TABLE OF ts_alv_config WITH KEY dynnr.
 
@@ -195,16 +243,46 @@ ENDCLASS.
 CLASS lcl_config_manager DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS:
+      "— Registrazione screen —
       register_alv
         IMPORTING iv_dynnr     TYPE sy-dynnr
                   iv_container TYPE scrfname
                   iv_structure TYPE dd02l-tabname
-                  iv_title     TYPE string OPTIONAL
-                  iv_pf_status TYPE string OPTIONAL,
+                  iv_title     TYPE string    OPTIONAL
+                  iv_pf_status TYPE string    OPTIONAL,
 
+      "— Campi —
       add_field_config
         IMPORTING is_field_config TYPE ts_field_config,
 
+      "— Sort —
+      add_sort
+        IMPORTING iv_dynnr TYPE sy-dynnr
+                  is_sort  TYPE lvc_s_sort,
+
+      "— Variant —
+      set_variant
+        IMPORTING iv_dynnr    TYPE sy-dynnr
+                  iv_report   TYPE syrepid   OPTIONAL
+                  iv_username TYPE syuname   OPTIONAL
+                  iv_variant  TYPE variant   OPTIONAL,
+
+      "— Print params —
+      set_print_params
+        IMPORTING iv_dynnr TYPE sy-dynnr
+                  is_print TYPE lvc_s_prnt,
+
+      "— Toolbar excluding —
+      add_toolbar_exclude
+        IMPORTING iv_dynnr TYPE sy-dynnr
+                  iv_func  TYPE ui_func,
+
+      "— Toolbar buttons —
+      add_toolbar_button
+        IMPORTING iv_dynnr  TYPE sy-dynnr
+                  is_button TYPE stb_button,
+
+      "— Getter / utility —
       get_alv_config
         IMPORTING iv_dynnr         TYPE sy-dynnr
         RETURNING VALUE(rs_config) TYPE ts_alv_config,
@@ -222,6 +300,7 @@ CLASS lcl_config_manager DEFINITION.
 
       set_screen_properties.
 ENDCLASS.
+
 
 *--------------------------------------------------------------------*
 * HELPER CLASS
@@ -264,53 +343,53 @@ CLASS lcl_alv_utils DEFINITION.
 
     CLASS-METHODS:
 
-      " Refresh con stabilizzazione riga/colonna
+      "— Refresh con stabilizzazione riga/colonna —
       refresh
         IMPORTING io_alv  TYPE REF TO cl_gui_alv_grid
                   iv_soft TYPE abap_bool DEFAULT abap_true,
 
-      " Abilita cella in editing
+      "— Abilita cella in editing —
       set_cell_editable
         IMPORTING iv_fieldname TYPE fieldname
         CHANGING  ct_sty       TYPE lvc_t_styl,
 
-      " Imposta cella read-only
+      "— Imposta cella read-only —
       set_cell_readonly
         IMPORTING iv_fieldname TYPE fieldname
         CHANGING  ct_sty       TYPE lvc_t_styl,
 
-      " Colora riga intera
+      "— Colora riga intera —
       set_row_color
         IMPORTING iv_color TYPE lvc_col
                   iv_int   TYPE i DEFAULT 1
         CHANGING  ct_col   TYPE lvc_t_scol,
 
-      " Colora cella singola
+      "— Colora cella singola —
       set_cell_color
         IMPORTING iv_fieldname TYPE fieldname
                   iv_color     TYPE lvc_col
                   iv_int       TYPE i DEFAULT 1
         CHANGING  ct_col       TYPE lvc_t_scol,
 
-      " Popup conferma dati non salvati — ritorna abap_true se ok procedere
+      "— Popup conferma dati non salvati — ritorna abap_true se ok procedere —
       confirm_unsaved_changes
         IMPORTING iv_dynnr          TYPE sy-dynnr
         RETURNING VALUE(rv_proceed) TYPE abap_bool,
 
-      " Righe selezionate dall'ALV corrente
+      "— Righe selezionate dall'ALV corrente —
       get_selected_rows
         IMPORTING io_alv         TYPE REF TO cl_gui_alv_grid
         RETURNING VALUE(rt_rows) TYPE lvc_t_row,
 
-      " Applica changed_data alla tabella interna (Strada B)
+      "— Applica changed_data alla tabella interna —
       apply_changed_data
         IMPORTING iv_dynnr TYPE sy-dynnr
         CHANGING  ct_table TYPE STANDARD TABLE,
 
-      " Restituisce la fieldcat e il descrittore di una generica struttura/tabella
+      "— Restituisce fieldcat e descrittore di una generica struttura/tabella —
       get_fieldcat_from_data
         IMPORTING
-          !xs_sap_line    TYPE any OPTIONAL
+          !xs_sap_line    TYPE any   OPTIONAL
           !xt_sap_table   TYPE table OPTIONAL
         EXPORTING
           !yo_structdescr TYPE REF TO cl_abap_structdescr
@@ -331,14 +410,18 @@ CLASS lcl_alv_event_dynamic IMPLEMENTATION.
     CASE e_ucomm.
       WHEN '&REFRESH'.
         CHECK go_current_alv IS BOUND.
-        go_current_alv->refresh_table_display( ).
+        lcl_alv_utils=>refresh( go_current_alv ).
       WHEN OTHERS.
         PERFORM handle_custom_command USING e_ucomm.
     ENDCASE.
   ENDMETHOD.
 
   METHOD handle_toolbar.
-    PERFORM build_dynamic_toolbar CHANGING e_object.
+    "— Inietta i bottoni custom dalla config del dynnr corrente —
+    ASSIGN gt_alv_config[ dynnr = sy-dynnr ] TO FIELD-SYMBOL(<cfg>).
+    IF sy-subrc EQ 0 AND <cfg>-toolbar_buttons IS NOT INITIAL.
+      APPEND LINES OF <cfg>-toolbar_buttons TO e_object->mt_toolbar.
+    ENDIF.
   ENDMETHOD.
 
   METHOD handle_hotspot_click.
@@ -346,14 +429,14 @@ CLASS lcl_alv_event_dynamic IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD handle_data_changed.
-    " Accumula nelle config del dynnr corrente
+    "— Accumula nelle config del dynnr corrente —
     ASSIGN gt_alv_config[ dynnr = sy-dynnr ] TO FIELD-SYMBOL(<cfg>).
     CHECK sy-subrc EQ 0.
     APPEND LINES OF er_data_changed->mt_good_cells    TO <cfg>-changed_data.
     APPEND LINES OF er_data_changed->mt_deleted_rows  TO <cfg>-deleted_data.
     APPEND LINES OF er_data_changed->mt_inserted_rows TO <cfg>-inserted_data.
 
-    " Chiama il hook nel report per validazioni custom
+    "— Hook nel report per validazioni custom —
     PERFORM handle_dynamic_data_changed CHANGING er_data_changed.
   ENDMETHOD.
 
@@ -375,23 +458,25 @@ CLASS lcl_alv_factory IMPLEMENTATION.
 
     ro_alv = NEW cl_gui_alv_grid( i_parent = lo_container ).
 
-
-    DATA(lt_fcat) = build_fieldcat( iv_dynnr     = iv_dynnr
-                                    iv_structure = ls_config-structure_name ).
-
+    DATA(lt_fcat) = build_fieldcat(
+      iv_dynnr     = iv_dynnr
+      iv_structure = ls_config-structure_name
+    ).
 
     DATA(ls_layout) = setup_layout( ls_config-data_table_ref ).
 
-
-
     ro_alv->set_table_for_first_display(
       EXPORTING
-        i_buffer_active = 'X'
-        i_save          = 'A'
-        is_layout       = ls_layout
+        i_buffer_active      = 'X'
+        i_save               = 'A'
+        is_layout            = ls_layout
+        is_variant           = ls_config-variant
+        is_print             = ls_config-print_params
+        it_toolbar_excluding = ls_config-toolbar_excl
       CHANGING
-        it_outtab       = <lt_table>
-        it_fieldcatalog = lt_fcat
+        it_outtab            = <lt_table>
+        it_fieldcatalog      = lt_fcat
+        it_sort              = ls_config-sort
     ).
 
     ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
@@ -407,7 +492,6 @@ CLASS lcl_alv_factory IMPLEMENTATION.
 
   METHOD build_fieldcat.
 
-
     IF iv_structure IS NOT INITIAL.
 
       CALL FUNCTION 'LVC_FIELDCATALOG_MERGE'
@@ -418,7 +502,6 @@ CLASS lcl_alv_factory IMPLEMENTATION.
 
     ELSE.
 
-
       DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
 
       FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE.
@@ -426,20 +509,20 @@ CLASS lcl_alv_factory IMPLEMENTATION.
 
       TRY.
           lcl_alv_utils=>get_fieldcat_from_data(
-              EXPORTING
-                xt_sap_table = <lt_table>
-              IMPORTING
-                yt_fcat      = rt_fcat
+            EXPORTING xt_sap_table = <lt_table>
+            IMPORTING yt_fcat      = rt_fcat
           ).
-
         CATCH cx_ai_system_fault INTO DATA(lx_sys_fault).
           DATA(lv_exc) = lx_sys_fault->get_text( ).
       ENDTRY.
 
     ENDIF.
 
-    apply_field_config( EXPORTING iv_dynnr = iv_dynnr
-                        CHANGING  ct_fcat  = rt_fcat ).
+    apply_field_config(
+      EXPORTING iv_dynnr = iv_dynnr
+      CHANGING  ct_fcat  = rt_fcat
+    ).
+
   ENDMETHOD.
 
   METHOD apply_field_config.
@@ -469,9 +552,8 @@ CLASS lcl_alv_factory IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD setup_layout.
-    rs_layout-zebra      = 'X'.
-    rs_layout-sel_mode   = 'A'.
-    rs_layout-cwidth_opt = 'X'.
+    rs_layout-zebra    = 'X'.
+    rs_layout-sel_mode = 'A'.
 
     CHECK ir_data_table IS BOUND.
 
@@ -499,7 +581,6 @@ CLASS lcl_alv_factory IMPLEMENTATION.
     SET HANDLER go_event_handler->handle_hotspot_click FOR io_alv.
     SET HANDLER go_event_handler->handle_data_changed  FOR io_alv.
 
-    " Registra eventi di editing
     io_alv->register_edit_event( i_event_id = cl_gui_alv_grid=>mc_evt_enter ).
     io_alv->register_edit_event(
       EXPORTING i_event_id = cl_gui_alv_grid=>mc_evt_modified
@@ -526,6 +607,38 @@ CLASS lcl_config_manager IMPLEMENTATION.
 
   METHOD add_field_config.
     APPEND is_field_config TO gt_field_config.
+  ENDMETHOD.
+
+  METHOD add_sort.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    APPEND is_sort TO <cfg>-sort.
+  ENDMETHOD.
+
+  METHOD set_variant.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    <cfg>-variant-report   = iv_report.
+    <cfg>-variant-username = iv_username.
+    <cfg>-variant-variant  = iv_variant.
+  ENDMETHOD.
+
+  METHOD set_print_params.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    <cfg>-print_params = is_print.
+  ENDMETHOD.
+
+  METHOD add_toolbar_exclude.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    APPEND iv_func TO <cfg>-toolbar_excl.
+  ENDMETHOD.
+
+  METHOD add_toolbar_button.
+    ASSIGN gt_alv_config[ dynnr = iv_dynnr ] TO FIELD-SYMBOL(<cfg>).
+    CHECK sy-subrc EQ 0.
+    APPEND is_button TO <cfg>-toolbar_buttons.
   ENDMETHOD.
 
   METHOD get_alv_config.
@@ -620,7 +733,6 @@ CLASS lcl_alv_utils IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD confirm_unsaved_changes.
-    " Se non ci sono modifiche pendenti, procedi direttamente
     rv_proceed = abap_true.
     CHECK lcl_config_manager=>has_unsaved_changes( iv_dynnr ) = abap_true.
 
@@ -651,8 +763,7 @@ CLASS lcl_alv_utils IMPLEMENTATION.
     LOOP AT ls_config-changed_data ASSIGNING FIELD-SYMBOL(<chng>).
       ASSIGN ct_table[ <chng>-row_id ] TO FIELD-SYMBOL(<row>).
       CHECK sy-subrc EQ 0.
-      ASSIGN COMPONENT <chng>-fieldname OF STRUCTURE <row>
-        TO FIELD-SYMBOL(<val>).
+      ASSIGN COMPONENT <chng>-fieldname OF STRUCTURE <row> TO FIELD-SYMBOL(<val>).
       CHECK sy-subrc EQ 0.
       <val> = <chng>-value.
     ENDLOOP.
@@ -663,14 +774,11 @@ CLASS lcl_alv_utils IMPLEMENTATION.
     DATA:
       lref_sap_struct TYPE REF TO data,
       lref_sap_table  TYPE REF TO data,
-
       lv_except_msg   TYPE string.
 
     FIELD-SYMBOLS:
       <sap_struct> TYPE any,
       <sap_table>  TYPE STANDARD TABLE.
-
-    "-------------------------------------------------
 
     FREE yo_structdescr.
     CLEAR yt_fcat[].
@@ -678,52 +786,43 @@ CLASS lcl_alv_utils IMPLEMENTATION.
     IF xs_sap_line IS SUPPLIED.
       CREATE DATA lref_sap_struct LIKE xs_sap_line.
       ASSIGN lref_sap_struct->* TO <sap_struct>.
-
       CREATE DATA lref_sap_table LIKE TABLE OF xs_sap_line.
       ASSIGN lref_sap_table->* TO <sap_table>.
 
     ELSEIF xt_sap_table IS SUPPLIED.
       CREATE DATA lref_sap_struct LIKE LINE OF xt_sap_table.
       ASSIGN lref_sap_struct->* TO <sap_struct>.
-
       CREATE DATA lref_sap_table LIKE xt_sap_table.
       ASSIGN lref_sap_table->* TO <sap_table>.
 
     ELSE.
       RAISE EXCEPTION TYPE cx_ai_system_fault
-        EXPORTING
-          errortext = tc_exception_msg-input_error.
-
+        EXPORTING errortext = tc_exception_msg-input_error.
     ENDIF.
 
     yo_structdescr ?= cl_abap_typedescr=>describe_by_data( <sap_struct> ).
+
     TRY.
         cl_salv_table=>factory(
-          IMPORTING
-            r_salv_table = DATA(lt_salv_table)
-          CHANGING
-            t_table      = <sap_table>
+          IMPORTING r_salv_table = DATA(lt_salv_table)
+          CHANGING  t_table      = <sap_table>
         ).
 
         yt_fcat = cl_salv_controller_metadata=>get_lvc_fieldcatalog(
-          r_columns      = lt_salv_table->get_columns( ) " ALV Filter
-          r_aggregations = lt_salv_table->get_aggregations( ) " ALV Aggregations
+          r_columns      = lt_salv_table->get_columns( )
+          r_aggregations = lt_salv_table->get_aggregations( )
         ).
 
       CATCH cx_ai_system_fault INTO DATA(lx_ai_system_fault).
         lv_except_msg = lx_ai_system_fault->get_text( ).
         RAISE EXCEPTION TYPE cx_ai_system_fault
-          EXPORTING
-            errortext = tc_exception_msg-unable_def_struct.
+          EXPORTING errortext = tc_exception_msg-unable_def_struct.
 
-      CATCH cx_salv_msg  INTO DATA(lx_salv_msg).
+      CATCH cx_salv_msg INTO DATA(lx_salv_msg).
         lv_except_msg = lx_salv_msg->get_text( ).
         RAISE EXCEPTION TYPE cx_ai_system_fault
-          EXPORTING
-            errortext = tc_exception_msg-unable_def_struct.
-
+          EXPORTING errortext = tc_exception_msg-unable_def_struct.
     ENDTRY.
-
 
   ENDMETHOD.
 
@@ -749,10 +848,6 @@ ENDFORM.
 
 *& Hook: implementa nel programma chiamante
 *FORM handle_custom_command USING iv_command TYPE sy-ucomm.
-*ENDFORM.
-*
-*FORM build_dynamic_toolbar
-*  CHANGING co_object TYPE REF TO cl_alv_event_toolbar_set.
 *ENDFORM.
 *
 *FORM handle_dynamic_hotspot
