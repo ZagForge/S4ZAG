@@ -52,10 +52,11 @@ CLASS zag_cl_filer DEFINITION
     METHODS:
       file_download
         IMPORTING
-          !xv_filename TYPE string
-          !xv_source   TYPE char1     DEFAULT tc_file_source-local
+          !xv_filename  TYPE string
+          !xv_source    TYPE char1     DEFAULT tc_file_source-local
+          !xv_separator TYPE c OPTIONAL
         CHANGING
-          !yref_tsap   TYPE REF TO data
+          !yref_tsap    TYPE REF TO data
         RAISING
           cx_ai_system_fault,
 
@@ -63,6 +64,7 @@ CLASS zag_cl_filer DEFINITION
         IMPORTING
           !xv_filename    TYPE string
           !xv_source      TYPE char1   DEFAULT tc_file_source-local
+          !xv_separator   TYPE c OPTIONAL
         CHANGING
           !yref_tsap      TYPE REF TO data
           !yt_conv_errors TYPE tt_conversions_errors
@@ -313,8 +315,9 @@ CLASS zag_cl_filer IMPLEMENTATION.
         "-------------------------------------------------
         init_instance(
           EXPORTING
-            xv_filename = xv_filename
-            xv_header   = abap_true
+            xv_filename  = xv_filename
+            xv_header    = abap_true
+            xv_separator = xv_separator
           CHANGING
             yref_tsap   = yref_tsap
         ).
@@ -386,10 +389,11 @@ CLASS zag_cl_filer IMPLEMENTATION.
         "-------------------------------------------------
         init_instance(
           EXPORTING
-            xv_filename = xv_filename
-            xv_header   = abap_true
+            xv_filename  = xv_filename
+            xv_header    = abap_true
+            xv_separator = xv_separator
           CHANGING
-            yref_tsap   = yref_tsap
+            yref_tsap    = yref_tsap
         ).
 
 
@@ -628,6 +632,10 @@ CLASS zag_cl_filer IMPLEMENTATION.
         EXPORTING
           errortext = tc_exception_msg-not_supported_file.
 
+    ENDIF.
+
+    IF xv_separator IS NOT INITIAL.
+      me->gv_separator = xv_separator.
     ENDIF.
 
 
