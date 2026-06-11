@@ -381,11 +381,6 @@ CLASS lcl_alv_utils DEFINITION.
         IMPORTING io_alv         TYPE REF TO cl_gui_alv_grid
         RETURNING VALUE(rt_rows) TYPE lvc_t_row,
 
-      "— Applica changed_data alla tabella interna —
-      apply_changed_data
-        IMPORTING iv_dynnr TYPE sy-dynnr
-        CHANGING  ct_table TYPE STANDARD TABLE,
-
       "— Restituisce fieldcat e descrittore di una generica struttura/tabella —
       get_fieldcat_from_data
         IMPORTING
@@ -754,19 +749,6 @@ CLASS lcl_alv_utils IMPLEMENTATION.
     io_alv->get_selected_rows(
       IMPORTING et_index_rows = rt_rows
     ).
-  ENDMETHOD.
-
-  METHOD apply_changed_data.
-    DATA(ls_config) = lcl_config_manager=>get_alv_config( iv_dynnr ).
-    CHECK ls_config-changed_data IS NOT INITIAL.
-
-    LOOP AT ls_config-changed_data ASSIGNING FIELD-SYMBOL(<chng>).
-      ASSIGN ct_table[ <chng>-row_id ] TO FIELD-SYMBOL(<row>).
-      CHECK sy-subrc EQ 0.
-      ASSIGN COMPONENT <chng>-fieldname OF STRUCTURE <row> TO FIELD-SYMBOL(<val>).
-      CHECK sy-subrc EQ 0.
-      <val> = <chng>-value.
-    ENDLOOP.
   ENDMETHOD.
 
   METHOD get_fieldcat_from_data.

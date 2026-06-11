@@ -153,7 +153,7 @@ MODULE user_command_0100 INPUT.
     WHEN 'EXIT' OR 'CANC' OR '&F15' OR '&F12'.
       LEAVE PROGRAM.
 
-    WHEN 'SAVE'.
+    WHEN 'ZSAVE'.
       PERFORM save_data.
 
   ENDCASE.
@@ -222,12 +222,6 @@ FORM save_data.
   CHECK go_alv_0100 IS BOUND.
 
   go_alv_0100->check_changed_data( ).
-
-  " Applica changed_data accumulata nella config a gt_mara
-  lcl_alv_utils=>apply_changed_data(
-    EXPORTING iv_dynnr = c_dynnr_0100
-    CHANGING  ct_table = gt_mara
-  ).
 
   LOOP AT gt_mara ASSIGNING FIELD-SYMBOL(<row>).
 *   UPDATE mara SET mtart = <row>-mtart WHERE matnr = <row>-matnr.
