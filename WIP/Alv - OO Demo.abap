@@ -131,10 +131,7 @@ START-OF-SELECTION.
 *--------------------------------------------------------------------*
 MODULE status_0100 OUTPUT.
   lcl_config_manager=>set_screen_properties( ).
-  go_alv_0100 = lcl_config_manager=>get_alv_ref( c_dynnr_0100 ).
-  IF go_alv_0100 IS NOT BOUND.
-    go_alv_0100 = lcl_alv_factory=>create_alv( c_dynnr_0100 ).
-  ENDIF.
+  go_alv_0100 = lcl_alv_factory=>get_or_create_alv( c_dynnr_0100 ).
 ENDMODULE.
 
 *--------------------------------------------------------------------*
@@ -170,6 +167,9 @@ FORM handle_custom_command USING iv_command TYPE sy-ucomm.
       PERFORM show_detail.
     WHEN OTHERS.
   ENDCASE.
+
+  CHECK go_alv_0100 IS BOUND.
+  lcl_alv_utils=>refresh( go_alv_0100 ).
 ENDFORM.
 
 *--------------------------------------------------------------------*
@@ -229,7 +229,6 @@ FORM save_data.
 
   lcl_config_manager=>clear_changed_data( c_dynnr_0100 ).
   MESSAGE 'Dati salvati' TYPE 'S'.
-  lcl_alv_utils=>refresh( go_alv_0100 ).
 ENDFORM.
 
 *--------------------------------------------------------------------*

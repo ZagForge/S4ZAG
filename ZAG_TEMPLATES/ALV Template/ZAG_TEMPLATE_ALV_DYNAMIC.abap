@@ -97,14 +97,11 @@
 *&      GET REFERENCE OF gt_mia_tabella INTO lr_data.
 *&      PERFORM call_alv_screen USING '0100' lr_data.
 *&
-*& 11) PBO dello screen — crea ALV solo al primo PBO:
+*& 11) PBO dello screen — crea l'ALV al primo giro, lo refresha nei successivi:
 *&
 *&      MODULE status_0100 OUTPUT.
 *&        lcl_config_manager=>set_screen_properties( ).
-*&        go_alv_0100 = lcl_config_manager=>get_alv_ref( '0100' ).
-*&        IF go_alv_0100 IS NOT BOUND.
-*&          go_alv_0100 = lcl_alv_factory=>create_alv( '0100' ).
-*&        ENDIF.
+*&        go_alv_0100 = lcl_alv_factory=>get_or_create_alv( '0100' ).
 *&      ENDMODULE.
 *&
 *& 12) PAI dello screen — gestisci comandi e salvataggio.
@@ -115,6 +112,10 @@
 *&
 *&   FORM handle_custom_command USING iv_command TYPE sy-ucomm.
 *&   ENDFORM.
+*&
+*&   " I comandi custom (bottoni toolbar) NON passano dal ciclo PBO/PAI del
+*&   " dynpro: richiama lcl_alv_utils=>refresh( go_alv_xxxx ) una sola volta
+*&   " dopo l'ENDCASE (non in ogni singola FORM) — vedi ALV OO Demo.
 *&
 *&   " is_row_id-index        = indice riga
 *&   " is_column_id-fieldname = campo cliccato
@@ -217,6 +218,11 @@ CLASS lcl_alv_factory DEFINITION.
   PUBLIC SECTION.
     CLASS-METHODS:
       create_alv
+        IMPORTING iv_dynnr      TYPE sy-dynnr
+        RETURNING VALUE(ro_alv) TYPE REF TO cl_gui_alv_grid,
+      "— Da chiamare ad ogni PBO: crea l'ALV al primo giro,
+      "  lo aggiorna (refresh) nei giri successivi —
+      get_or_create_alv
         IMPORTING iv_dynnr      TYPE sy-dynnr
         RETURNING VALUE(ro_alv) TYPE REF TO cl_gui_alv_grid,
       build_fieldcat
@@ -345,7 +351,7 @@ CLASS lcl_alv_utils DEFINITION.
       "— Refresh con stabilizzazione riga/colonna —
       refresh
         IMPORTING io_alv  TYPE REF TO cl_gui_alv_grid
-                  iv_soft TYPE abap_bool DEFAULT abap_true,
+                  iv_soft TYPE abap_bool DEFAULT abap_false,
 
       "— Abilita cella in editing —
       set_cell_editable
@@ -401,14 +407,11 @@ ENDCLASS.
 CLASS lcl_alv_event_dynamic IMPLEMENTATION.
 
   METHOD handle_user_command.
-    CASE e_ucomm.
-      WHEN '&REFRESH'.
-        DATA(lo_alv) = lcl_config_manager=>get_alv_ref( sy-dynnr ).
-        CHECK lo_alv IS BOUND.
-        lcl_alv_utils=>refresh( lo_alv ).
-      WHEN OTHERS.
-        PERFORM handle_custom_command USING e_ucomm.
-    ENDCASE.
+    PERFORM handle_custom_command USING e_ucomm.
+
+    DATA(lo_alv) = lcl_config_manager=>get_alv_ref( sy-dynnr ).
+    CHECK lo_alv IS BOUND.
+    lcl_alv_utils=>refresh( lo_alv ).
   ENDMETHOD.
 
   METHOD handle_toolbar.
@@ -491,6 +494,15 @@ CLASS lcl_alv_factory IMPLEMENTATION.
       register_events( ro_alv ).
     ENDIF.
 
+  ENDMETHOD.
+
+  METHOD get_or_create_alv.
+    ro_alv = lcl_config_manager=>get_alv_ref( iv_dynnr ).
+    IF ro_alv IS NOT BOUND.
+      ro_alv = create_alv( iv_dynnr ).
+    ELSE.
+      lcl_alv_utils=>refresh( ro_alv ).
+    ENDIF.
   ENDMETHOD.
 
   METHOD build_fieldcat.
