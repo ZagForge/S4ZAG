@@ -24,10 +24,12 @@
 
 ### 2. What do you need to implement?<a name="implemented_objects"/>
 
--  **CDS Databse**
-	- [ZAG_CDS_LFA1](https://github.com/avorio-dev/S4ZAG/blob/main/ZAG_ODATAV4/CDS%20Database/ZAG_CDS_LFA1.abap)
-	- [ZAG_CDS_LFB1](https://github.com/avorio-dev/S4ZAG/blob/main/ZAG_ODATAV4/CDS%20Database/ZAG_CDS_LFB1.abap)
-	- [ZAG_CDS_LFM1](https://github.com/avorio-dev/S4ZAG/blob/main/ZAG_ODATAV4/CDS%20Database/ZAG_CDS_LFM1.abap)
+> Questo esempio legge/scrive direttamente sulle tabelle standard **LFA1**/**LFB1**/**LFM1**,
+> senza passare da CDS view: il framework OData V4 code-based non richiede una CDS come
+> data source, basta una struttura qualsiasi (vedi `ts_vendor`/`ts_company`/`ts_purchorg`
+> nell'interfaccia) da passare a `create_entity_type_by_struct`. Le CDS restano comunque
+> un'opzione valida se vuoi riusare associazioni/annotazioni altrove, ma qui — essendo
+> solo estrazione — avrebbero aggiunto un livello in più senza reale beneficio.
 
 - **Interface**
 	- [ZAG_IF_ODATAV4_VENDOR](https://github.com/avorio-dev/S4ZAG/blob/main/ZAG_ODATAV4/Class%20Implementations/zag_if_odatav4_vendor.abap)

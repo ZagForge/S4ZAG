@@ -22,7 +22,7 @@ CLASS zag_cl_odatav4_vendor_model DEFINITION
     "Aliases
     "---------------------------------------------------------------
     ALIASES:
-        ts_cds_views         FOR zag_if_odatav4_vendor~ts_cds_views,
+        ts_vendor_structures FOR zag_if_odatav4_vendor~ts_vendor_structures,
         tc_entity_set_names  FOR zag_if_odatav4_vendor~tc_entity_set_names,
         tc_entity_type_names FOR zag_if_odatav4_vendor~tc_entity_type_names,
         tc_nav_prop_names    FOR zag_if_odatav4_vendor~tc_nav_prop_names.
@@ -67,7 +67,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
 
   METHOD define_company.
 
-    DATA: ls_ref_cds_view   TYPE ts_cds_views-company,
+    DATA: ls_ref_structure  TYPE ts_vendor_structures-company,
           lo_primitive_prop TYPE REF TO /iwbep/if_v4_med_prim_prop.
 
 
@@ -75,7 +75,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
     "---------------------------------------------------------------
     DATA(lo_entity_type) = io_model->create_entity_type_by_struct(
                              iv_entity_type_name          = tc_entity_type_names-internal-company
-                             is_structure                 = ls_ref_cds_view
+                             is_structure                 = ls_ref_structure
                              iv_add_conv_to_prim_props    = abap_true
                              iv_add_f4_help_to_prim_props = abap_true
                              iv_gen_prim_props            = abap_true
@@ -123,7 +123,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
 
   METHOD define_purchorg.
 
-    DATA: ls_ref_cds_view   TYPE ts_cds_views-purchorg,
+    DATA: ls_ref_structure  TYPE ts_vendor_structures-purchorg,
           lo_primitive_prop TYPE REF TO /iwbep/if_v4_med_prim_prop.
 
 
@@ -131,7 +131,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
     "---------------------------------------------------------------
     DATA(lo_entity_type) = io_model->create_entity_type_by_struct(
                              iv_entity_type_name          = tc_entity_type_names-internal-purchorg
-                             is_structure                 = ls_ref_cds_view
+                             is_structure                 = ls_ref_structure
                              iv_add_conv_to_prim_props    = abap_true
                              iv_add_f4_help_to_prim_props = abap_true
                              iv_gen_prim_props            = abap_true
@@ -179,7 +179,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
 
   METHOD define_vendor.
 
-    DATA: ls_ref_cds_view   TYPE ts_cds_views-vendor,
+    DATA: ls_ref_structure  TYPE ts_vendor_structures-vendor,
           lo_primitive_prop TYPE REF TO /iwbep/if_v4_med_prim_prop,
           lo_nav_prop       TYPE REF TO /iwbep/if_v4_med_nav_prop.
 
@@ -188,7 +188,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
     "---------------------------------------------------------------
     DATA(lo_entity_type) = io_model->create_entity_type_by_struct(
         iv_entity_type_name          = tc_entity_type_names-internal-vendor
-        is_structure                 = ls_ref_cds_view
+        is_structure                 = ls_ref_structure
         iv_gen_prim_props            = abap_true
         iv_add_conv_to_prim_props    = abap_true
         iv_add_f4_help_to_prim_props = abap_true

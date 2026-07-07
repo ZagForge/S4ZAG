@@ -31,7 +31,7 @@ CLASS zag_cl_odatav4_vendor_data DEFINITION
     "Aliases
     "---------------------------------------------------------------
     ALIASES:
-          ts_cds_views         FOR zag_if_odatav4_vendor~ts_cds_views,
+          ts_vendor_structures FOR zag_if_odatav4_vendor~ts_vendor_structures,
           ts_deep_vendor       FOR zag_if_odatav4_vendor~ts_deep_struct,
           tt_deep_vendor       FOR zag_if_odatav4_vendor~tt_deep_struct,
           tc_entity_set_names  FOR zag_if_odatav4_vendor~tc_entity_set_names,
@@ -512,8 +512,8 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD create_entity_vendor.
 
-    DATA: ls_cds_lfa1  TYPE ts_cds_views-vendor,
-          lv_new_lifnr TYPE ts_cds_views-vendor-lifnr.
+    DATA: ls_lfa1  TYPE ts_vendor_structures-vendor,
+          lv_new_lifnr TYPE ts_vendor_structures-vendor-lifnr.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_create=>ty_s_todo_list         VALUE IS INITIAL,
@@ -525,7 +525,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     IF ls_todo_list-process-busi_data = abap_true.
       io_request->get_busi_data(
         IMPORTING
-            es_busi_data = ls_cds_lfa1
+            es_busi_data = ls_lfa1
       ).
       ls_done_list-busi_data = abap_true. "business data processed
     ENDIF.
@@ -547,12 +547,12 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     IF ls_todo_list-return-busi_data = abap_true.
 
       " Read data again and set the response.
-      CLEAR ls_cds_lfa1.
-      SELECT SINGLE * FROM zag_cds_lfa1
-        INTO CORRESPONDING FIELDS OF @ls_cds_lfa1
+      CLEAR ls_lfa1.
+      SELECT SINGLE * FROM lfa1
+        INTO CORRESPONDING FIELDS OF @ls_lfa1
         WHERE lifnr = @lv_new_lifnr.
 
-      io_response->set_busi_data( ls_cds_lfa1 ).
+      io_response->set_busi_data( ls_lfa1 ).
 
     ENDIF.
 
@@ -641,7 +641,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD delete_entity_vendor.
 
-    DATA: ls_key_data TYPE ts_cds_views-vendor.
+    DATA: ls_key_data TYPE ts_vendor_structures-vendor.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_delete=>ty_s_todo_list         VALUE IS INITIAL,
@@ -667,8 +667,8 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_entity_company.
 
-    DATA: ls_key_data TYPE ts_cds_views-company,
-          ls_cds_lfb1 TYPE ts_cds_views-company.
+    DATA: ls_key_data TYPE ts_vendor_structures-company,
+          ls_lfb1 TYPE ts_vendor_structures-company.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_read=>ty_s_todo_list         VALUE IS INITIAL,
@@ -688,16 +688,16 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
     "Perform the extraction
     "---------------------------------------------------------------
-    CLEAR ls_cds_lfb1.
+    CLEAR ls_lfb1.
     SELECT *
-        FROM zag_cds_lfb1
-        INTO @ls_cds_lfb1
+        FROM lfb1
+        INTO @ls_lfb1
         WHERE lifnr EQ @ls_key_data-lifnr
           AND bukrs EQ @ls_key_data-bukrs.
     ENDSELECT.
     IF sy-subrc EQ 0.
 
-      io_response->set_busi_data( is_busi_data = ls_cds_lfb1 ).
+      io_response->set_busi_data( is_busi_data = ls_lfb1 ).
 
     ENDIF.
 
@@ -709,8 +709,8 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_entity_purchorg.
 
-    DATA: ls_key_data TYPE ts_cds_views-purchorg,
-          ls_cds_lfm1 TYPE ts_cds_views-purchorg.
+    DATA: ls_key_data TYPE ts_vendor_structures-purchorg,
+          ls_lfm1 TYPE ts_vendor_structures-purchorg.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_read=>ty_s_todo_list         VALUE IS INITIAL,
@@ -730,16 +730,16 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
     "Perform the extraction
     "---------------------------------------------------------------
-    CLEAR ls_cds_lfm1.
+    CLEAR ls_lfm1.
     SELECT *
-        FROM zag_cds_lfm1
-        INTO @ls_cds_lfm1
+        FROM lfm1
+        INTO @ls_lfm1
         WHERE lifnr EQ @ls_key_data-lifnr
           AND ekorg EQ @ls_key_data-ekorg.
     ENDSELECT.
     IF sy-subrc EQ 0.
 
-      io_response->set_busi_data( is_busi_data = ls_cds_lfm1 ).
+      io_response->set_busi_data( is_busi_data = ls_lfm1 ).
 
     ENDIF.
 
@@ -751,8 +751,8 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_entity_vendor.
 
-    DATA: ls_key_data TYPE ts_cds_views-vendor,
-          ls_cds_lfa1 TYPE ts_cds_views-vendor.
+    DATA: ls_key_data TYPE ts_vendor_structures-vendor,
+          ls_lfa1 TYPE ts_vendor_structures-vendor.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_read=>ty_s_todo_list         VALUE IS INITIAL,
@@ -769,15 +769,15 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
     "Perform the extraction
     "---------------------------------------------------------------
-    CLEAR ls_cds_lfa1.
+    CLEAR ls_lfa1.
     SELECT * UP TO 1 ROWS
-        FROM zag_cds_lfa1
-        INTO @ls_cds_lfa1
+        FROM lfa1
+        INTO @ls_lfa1
         WHERE lifnr EQ @ls_key_data-lifnr.
     ENDSELECT.
     IF sy-subrc EQ 0.
 
-      io_response->set_busi_data( is_busi_data = ls_cds_lfa1 ).
+      io_response->set_busi_data( is_busi_data = ls_lfa1 ).
 
     ENDIF.
 
@@ -789,11 +789,11 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_list_company.
 
-    DATA: lt_key_company TYPE STANDARD TABLE OF ts_cds_views-company,
+    DATA: lt_key_company TYPE STANDARD TABLE OF ts_vendor_structures-company,
           lr_key_lifnr   TYPE zag_if_odatav4_vendor=>ts_key_range-lifnr,
           lr_key_bukrs   TYPE zag_if_odatav4_vendor=>ts_key_range-bukrs,
           lv_max_index   TYPE i,
-          lt_company     TYPE STANDARD TABLE OF ts_cds_views-company.
+          lt_company     TYPE STANDARD TABLE OF ts_vendor_structures-company.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
@@ -841,7 +841,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CASE ls_todo_list-return-busi_data.
       WHEN abap_true.
 
-        " Read data from the CDS view
+        " Read data from the DB table
         " value for max_index must only be calculated if the request also contains a $top
         lv_max_index = COND #(
             WHEN iv_top IS NOT INITIAL THEN iv_top + iv_skip
@@ -850,7 +850,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
         CLEAR lt_company[].
         SELECT (iv_select_string) UP TO @lv_max_index ROWS
-         FROM zag_cds_lfb1
+         FROM lfb1
          INTO CORRESPONDING FIELDS OF TABLE @lt_company
           WHERE (iv_where_clause)
             AND lifnr IN @lr_key_lifnr[]
@@ -871,7 +871,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
         IF ls_todo_list-return-count = abap_true.
 
           SELECT COUNT( * )
-              FROM zag_cds_lfb1
+              FROM lfb1
               WHERE (iv_where_clause)
                 AND lifnr IN @lr_key_lifnr[]
                 AND bukrs IN @lr_key_bukrs[].
@@ -890,11 +890,11 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_list_purchorg.
 
-    DATA: lt_key_purchorg TYPE STANDARD TABLE OF ts_cds_views-purchorg,
+    DATA: lt_key_purchorg TYPE STANDARD TABLE OF ts_vendor_structures-purchorg,
           lr_key_lifnr    TYPE zag_if_odatav4_vendor=>ts_key_range-lifnr,
           lr_key_ekorg    TYPE zag_if_odatav4_vendor=>ts_key_range-ekorg,
           lv_max_index    TYPE i,
-          lt_purchorg     TYPE STANDARD TABLE OF ts_cds_views-purchorg.
+          lt_purchorg     TYPE STANDARD TABLE OF ts_vendor_structures-purchorg.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
@@ -942,7 +942,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CASE ls_todo_list-return-busi_data.
       WHEN abap_true.
 
-        " Read data from the CDS view
+        " Read data from the DB table
         " value for max_index must only be calculated if the request also contains a $top
         lv_max_index = COND #(
             WHEN iv_top IS NOT INITIAL THEN iv_top + iv_skip
@@ -951,7 +951,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
         CLEAR lt_purchorg[].
         SELECT (iv_select_string) UP TO @lv_max_index ROWS
-         FROM zag_cds_lfm1
+         FROM lfm1
          INTO CORRESPONDING FIELDS OF TABLE @lt_purchorg
           WHERE (iv_where_clause)
             AND lifnr IN @lr_key_lifnr[]
@@ -972,7 +972,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
         IF ls_todo_list-return-count = abap_true.
 
           SELECT COUNT( * )
-              FROM zag_cds_lfm1
+              FROM lfm1
               WHERE (iv_where_clause)
                 AND lifnr IN @lr_key_lifnr[]
                 AND ekorg IN @lr_key_ekorg[].
@@ -991,10 +991,10 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_list_vendor.
 
-    DATA: lt_key_vendor TYPE STANDARD TABLE OF ts_cds_views-vendor,
+    DATA: lt_key_vendor TYPE STANDARD TABLE OF ts_vendor_structures-vendor,
           lr_key_vendor TYPE zag_if_odatav4_vendor=>ts_key_range-lifnr,
           lv_max_index  TYPE i,
-          lt_vendor     TYPE STANDARD TABLE OF ts_cds_views-vendor.
+          lt_vendor     TYPE STANDARD TABLE OF ts_vendor_structures-vendor.
 
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
@@ -1030,7 +1030,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CASE ls_todo_list-return-busi_data.
       WHEN abap_true.
 
-        " Read data from the CDS view
+        " Read data from the DB table
         " value for max_index must only be calculated if the request also contains a $top
         lv_max_index = COND #(
             WHEN iv_top IS NOT INITIAL THEN iv_top + iv_skip
@@ -1039,7 +1039,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
         CLEAR lt_vendor[].
         SELECT (iv_select_string) UP TO @lv_max_index ROWS
-         FROM zag_cds_lfa1
+         FROM lfa1
          INTO CORRESPONDING FIELDS OF TABLE @lt_vendor
           WHERE (iv_where_clause)
             AND lifnr IN @lr_key_vendor[]
@@ -1059,7 +1059,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
         IF ls_todo_list-return-count = abap_true.
 
           SELECT COUNT( * )
-              FROM zag_cds_lfa1
+              FROM lfa1
               WHERE (iv_where_clause)
                 AND lifnr IN @lr_key_vendor[].
 
@@ -1077,9 +1077,9 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD read_ref_key_list_vendor.
 
-    DATA: ls_key_data          TYPE ts_cds_views-vendor,
-          lt_key_company       TYPE STANDARD TABLE OF ts_cds_views-company,
-          lt_key_purchorg      TYPE STANDARD TABLE OF ts_cds_views-purchorg,
+    DATA: ls_key_data          TYPE ts_vendor_structures-vendor,
+          lt_key_company       TYPE STANDARD TABLE OF ts_vendor_structures-company,
+          lt_key_purchorg      TYPE STANDARD TABLE OF ts_vendor_structures-purchorg,
           lv_nav_property_name TYPE /iwbep/if_v4_med_element=>ty_e_med_internal_name.
 
 
@@ -1108,7 +1108,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
         CLEAR lt_key_company[].
         SELECT lifnr, bukrs
-            FROM zag_cds_lfb1
+            FROM lfb1
             INTO TABLE @lt_key_company
             WHERE lifnr EQ @ls_key_data-lifnr.
 
@@ -1118,7 +1118,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
         CLEAR lt_key_purchorg[].
         SELECT lifnr, ekorg
-            FROM zag_cds_lfm1
+            FROM lfm1
             INTO TABLE @lt_key_purchorg
             WHERE lifnr EQ @ls_key_data-lifnr.
 
@@ -1136,8 +1136,8 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
   METHOD update_entity_vendor.
 
-    DATA: ls_key_data TYPE ts_cds_views-vendor,
-          ls_cds_lfa1 TYPE ts_cds_views-vendor.
+    DATA: ls_key_data TYPE ts_vendor_structures-vendor,
+          ls_lfa1 TYPE ts_vendor_structures-vendor.
 
 
     " Get the request options the application should/must handle
@@ -1158,7 +1158,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     IF ls_todo_list-process-busi_data = abap_true.
       io_request->get_busi_data(
         IMPORTING
-            es_busi_data = ls_cds_lfa1
+            es_busi_data = ls_lfa1
       ).
       ls_done_list-busi_data = abap_true. "business data processed
     ENDIF.
@@ -1169,7 +1169,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
 
     IF ls_todo_list-return-busi_data = abap_true.
 
-      io_response->set_busi_data( ls_cds_lfa1 ).
+      io_response->set_busi_data( ls_lfa1 ).
 
     ENDIF.
 
