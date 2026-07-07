@@ -691,7 +691,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CLEAR ls_lfb1.
     SELECT *
         FROM lfb1
-        INTO @ls_lfb1
+        INTO CORRESPONDING FIELDS OF @ls_lfb1
         WHERE lifnr EQ @ls_key_data-lifnr
           AND bukrs EQ @ls_key_data-bukrs.
     ENDSELECT.
@@ -733,7 +733,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CLEAR ls_lfm1.
     SELECT *
         FROM lfm1
-        INTO @ls_lfm1
+        INTO CORRESPONDING FIELDS OF @ls_lfm1
         WHERE lifnr EQ @ls_key_data-lifnr
           AND ekorg EQ @ls_key_data-ekorg.
     ENDSELECT.
@@ -772,7 +772,7 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     CLEAR ls_lfa1.
     SELECT * UP TO 1 ROWS
         FROM lfa1
-        INTO @ls_lfa1
+        INTO CORRESPONDING FIELDS OF @ls_lfa1
         WHERE lifnr EQ @ls_key_data-lifnr.
     ENDSELECT.
     IF sy-subrc EQ 0.
