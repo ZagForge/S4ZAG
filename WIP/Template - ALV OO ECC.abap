@@ -465,14 +465,23 @@ CLASS lcl_alv_factory IMPLEMENTATION.
     FIELD-SYMBOLS: <lt_table> TYPE STANDARD TABLE.
     ASSIGN ls_config-data_table_ref->* TO <lt_table>.
 
-    DATA lo_container TYPE REF TO cl_gui_custom_container.
-    CREATE OBJECT lo_container
-      EXPORTING
-        container_name = ls_config-container_name.
+    DATA lo_container     TYPE REF TO cl_gui_custom_container.
+    DATA lo_doc_container TYPE REF TO cl_gui_docking_container.
 
-    CREATE OBJECT ro_alv
-      EXPORTING
-        i_parent = lo_container.
+    IF cl_gui_alv_grid=>offline( ) IS INITIAL.
+      CREATE OBJECT lo_container
+        EXPORTING
+          container_name = ls_config-container_name.
+
+      CREATE OBJECT ro_alv
+        EXPORTING
+          i_parent = lo_container.
+    ELSE.
+      "— In background non esiste un container reale: si passa un docking_container non istanziato —
+      CREATE OBJECT ro_alv
+        EXPORTING
+          i_parent = lo_doc_container.
+    ENDIF.
 
     DATA lt_fcat TYPE lvc_t_fcat.
     lt_fcat = build_fieldcat(
@@ -507,7 +516,9 @@ CLASS lcl_alv_factory IMPLEMENTATION.
       <cfg>-container_ref = lo_container.
     ENDIF.
 
-    register_events( ro_alv ).
+    IF sy-batch EQ space.
+      register_events( ro_alv ).
+    ENDIF.
 
   ENDMETHOD.                    "create_alv
 
