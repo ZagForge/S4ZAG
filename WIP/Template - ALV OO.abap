@@ -190,7 +190,6 @@ TYPES: BEGIN OF ts_field_config,
 *--------------------------------------------------------------------*
 DATA: gt_alv_config    TYPE tt_alv_config,
       gt_field_config  TYPE tt_field_config,
-      go_current_alv   TYPE REF TO cl_gui_alv_grid,
       go_event_handler TYPE REF TO lcl_alv_event_dynamic.
 
 
@@ -404,8 +403,9 @@ CLASS lcl_alv_event_dynamic IMPLEMENTATION.
   METHOD handle_user_command.
     CASE e_ucomm.
       WHEN '&REFRESH'.
-        CHECK go_current_alv IS BOUND.
-        lcl_alv_utils=>refresh( go_current_alv ).
+        DATA(lo_alv) = lcl_config_manager=>get_alv_ref( sy-dynnr ).
+        CHECK lo_alv IS BOUND.
+        lcl_alv_utils=>refresh( lo_alv ).
       WHEN OTHERS.
         PERFORM handle_custom_command USING e_ucomm.
     ENDCASE.
@@ -480,7 +480,6 @@ CLASS lcl_alv_factory IMPLEMENTATION.
       <cfg>-container_ref = lo_container.
     ENDIF.
 
-    go_current_alv = ro_alv.
     register_events( ro_alv ).
 
   ENDMETHOD.
@@ -816,7 +815,7 @@ ENDCLASS.
 *--------------------------------------------------------------------*
 
 FORM initialize_dynamic_alv.
-  CLEAR: gt_alv_config, gt_field_config, go_current_alv, go_event_handler.
+  CLEAR: gt_alv_config, gt_field_config, go_event_handler.
 ENDFORM.
 
 FORM call_alv_screen USING iv_dynnr    TYPE sy-dynnr
