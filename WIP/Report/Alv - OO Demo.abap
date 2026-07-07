@@ -159,17 +159,17 @@ ENDMODULE.
 *--------------------------------------------------------------------*
 * HOOK: user command
 *--------------------------------------------------------------------*
-FORM handle_custom_command USING iv_command TYPE sy-ucomm.
+FORM handle_custom_command
+  USING iv_command       TYPE sy-ucomm
+        it_selected_rows TYPE lvc_t_row.
+
   CASE iv_command.
     WHEN 'ZSAVE'.
       PERFORM save_data.
     WHEN 'ZDETAIL'.
-      PERFORM show_detail.
+      PERFORM show_detail USING it_selected_rows.
     WHEN OTHERS.
   ENDCASE.
-
-  CHECK go_alv_0100 IS BOUND.
-  lcl_alv_utils=>refresh( go_alv_0100 ).
 ENDFORM.
 
 *--------------------------------------------------------------------*
@@ -234,14 +234,13 @@ ENDFORM.
 *--------------------------------------------------------------------*
 * DETTAGLIO RIGA
 *--------------------------------------------------------------------*
-FORM show_detail.
-  DATA(lt_rows) = lcl_alv_utils=>get_selected_rows( go_alv_0100 ).
-  IF lt_rows IS INITIAL.
+FORM show_detail USING it_selected_rows TYPE lvc_t_row.
+  IF it_selected_rows IS INITIAL.
     MESSAGE 'Seleziona almeno una riga' TYPE 'I'.
     RETURN.
   ENDIF.
 
-  READ TABLE gt_mara INDEX lt_rows[ 1 ]-index INTO DATA(ls_mara).
+  READ TABLE gt_mara INDEX it_selected_rows[ 1 ]-index INTO DATA(ls_mara).
   CHECK sy-subrc EQ 0.
 
   MESSAGE s646(db) WITH 'Riga selezionata'.

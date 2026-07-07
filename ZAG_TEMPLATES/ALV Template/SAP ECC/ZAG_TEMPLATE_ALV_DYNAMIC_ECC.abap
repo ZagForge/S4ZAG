@@ -113,12 +113,15 @@
 *& HOOK FORM — da implementare nel programma chiamante
 *&---------------------------------------------------------------------*
 *&
-*&   FORM handle_custom_command USING iv_command TYPE sy-ucomm.
+*&   FORM handle_custom_command
+*&     USING iv_command        TYPE sy-ucomm
+*&           it_selected_rows  TYPE lvc_t_row.
 *&   ENDFORM.
 *&
 *&   " I comandi custom (bottoni toolbar) NON passano dal ciclo PBO/PAI del
-*&   " dynpro: richiama lcl_alv_utils=>refresh( go_alv_xxxx ) una sola volta
-*&   " dopo l'ENDCASE (non in ogni singola FORM) — vedi ALV OO Demo.
+*&   " dynpro: il framework calcola già it_selected_rows (via
+*&   " lcl_alv_utils=>get_selected_rows) e richiama refresh( go_alv_xxxx )
+*&   " una sola volta dopo l'ENDCASE — vedi ALV OO Demo.
 *&
 *&   " is_row_id-index        = indice riga
 *&   " is_column_id-fieldname = campo cliccato
@@ -415,10 +418,17 @@ ENDCLASS.                    "lcl_alv_utils DEFINITION
 CLASS lcl_alv_event_dynamic IMPLEMENTATION.
 
   METHOD handle_user_command.
-    PERFORM handle_custom_command USING e_ucomm.
+    DATA lo_alv           TYPE REF TO cl_gui_alv_grid.
+    DATA lt_selected_rows TYPE lvc_t_row.
 
-    DATA lo_alv TYPE REF TO cl_gui_alv_grid.
     lo_alv = lcl_config_manager=>get_alv_ref( sy-dynnr ).
+
+    IF lo_alv IS BOUND.
+      lt_selected_rows = lcl_alv_utils=>get_selected_rows( lo_alv ).
+    ENDIF.
+
+    PERFORM handle_custom_command USING e_ucomm lt_selected_rows.
+
     CHECK lo_alv IS BOUND.
     lcl_alv_utils=>refresh( lo_alv ).
   ENDMETHOD.                    "handle_user_command
@@ -951,7 +961,9 @@ FORM call_alv_screen USING iv_dynnr    TYPE sy-dynnr
 ENDFORM.                    "call_alv_screen
 
 *& Hook: implementa nel programma chiamante
-*FORM handle_custom_command USING iv_command TYPE sy-ucomm.
+*FORM handle_custom_command
+*  USING iv_command       TYPE sy-ucomm
+*        it_selected_rows TYPE lvc_t_row.
 *ENDFORM.
 *
 *FORM handle_dynamic_hotspot
