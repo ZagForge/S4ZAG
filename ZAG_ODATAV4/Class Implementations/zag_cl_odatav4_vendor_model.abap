@@ -245,7 +245,7 @@ CLASS zag_cl_odatav4_vendor_model IMPLEMENTATION.
     lo_nav_prop = lo_entity_type->create_navigation_property(
         iv_property_name = tc_nav_prop_names-internal-vendor_to_company
     ).
-    lo_nav_prop->set_edm_name( tc_nav_prop_names-edm-vendor_to_comapny ).
+    lo_nav_prop->set_edm_name( tc_nav_prop_names-edm-vendor_to_company ).
 
     lo_nav_prop->set_target_entity_type_name( tc_entity_type_names-internal-company ).
     lo_nav_prop->set_target_multiplicity( /iwbep/if_v4_med_element=>gcs_med_nav_multiplicity-to_many_optional ).

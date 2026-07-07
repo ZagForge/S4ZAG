@@ -88,7 +88,7 @@ INTERFACE zag_if_odatav4_vendor
         vendor_to_purchorg TYPE /iwbep/if_v4_med_element=>ty_e_med_internal_name VALUE '_PURCHORG',
       END OF internal,
       BEGIN OF edm,
-        vendor_to_comapny  TYPE /iwbep/if_v4_med_element=>ty_e_med_edm_name VALUE '_Company',
+        vendor_to_company  TYPE /iwbep/if_v4_med_element=>ty_e_med_edm_name VALUE '_Company',
         vendor_to_purchorg TYPE /iwbep/if_v4_med_element=>ty_e_med_edm_name VALUE '_Purchorg',
       END OF edm,
     END OF tc_nav_prop_names.

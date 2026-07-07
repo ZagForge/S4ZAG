@@ -576,6 +576,9 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
     io_request->get_todos( IMPORTING es_todo_list = ls_todo_list ).
 
 
+    " Disabilitato di proposito: mostra come leggere l'espressione $expand
+    " per limitare il deep create ai soli nav prop richiesti, ma qui non è
+    " necessario perché gestiamo solo _Company/_Purchorg sotto Vendor.
     IF 1 = 2.
 
       io_request->get_data_description_express(
@@ -946,10 +949,10 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
             ELSE 0
         ).
 
-        CLEAR lt_key_purchorg[].
+        CLEAR lt_purchorg[].
         SELECT (iv_select_string) UP TO @lv_max_index ROWS
          FROM zag_cds_lfm1
-         INTO CORRESPONDING FIELDS OF TABLE @lt_key_purchorg
+         INTO CORRESPONDING FIELDS OF TABLE @lt_purchorg
           WHERE (iv_where_clause)
             AND lifnr IN @lr_key_lifnr[]
             AND ekorg IN @lr_key_ekorg[]
@@ -958,10 +961,10 @@ CLASS zag_cl_odatav4_vendor_data IMPLEMENTATION.
         " Skipping entries specified by $skip
         " not needed as of NW751 where OFFSET is supported in Open SQL
         IF iv_skip IS NOT INITIAL.
-          DELETE lt_key_purchorg TO iv_skip.
+          DELETE lt_purchorg TO iv_skip.
         ENDIF.
 
-        io_response->set_busi_data( it_busi_data = lt_key_purchorg ).
+        io_response->set_busi_data( it_busi_data = lt_purchorg ).
 
       WHEN abap_false.
 
