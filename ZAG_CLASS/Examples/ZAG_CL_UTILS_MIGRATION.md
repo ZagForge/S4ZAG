@@ -58,7 +58,7 @@ DATA(lt_userexit) = lo_mig->fetch_fm_userexit(
 ).
 
 LOOP AT lt_userexit ASSIGNING FIELD-SYMBOL(<ue>).
-  IF <ue>-implemented EQ abap_true.
+  IF <ue>-activ EQ abap_true.
     WRITE: / 'Implemented:', <ue>-funcname.
   ENDIF.
 ENDLOOP.
@@ -75,7 +75,7 @@ DATA(lt_screenexit) = lo_mig->fetch_screen_exit(
 ).
 
 LOOP AT lt_screenexit ASSIGNING FIELD-SYMBOL(<se>).
-  IF <se>-implemented EQ abap_true.
+  IF <se>-activ EQ abap_true.
     WRITE: / 'Implemented:', <se>-called_prog, <se>-called_dynnr.
   ENDIF.
 ENDLOOP.

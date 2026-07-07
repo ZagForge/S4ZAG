@@ -92,32 +92,25 @@
   ).
 
 
-  DATA(lo_send_mail) = NEW zag_cl_send_mail( ).
-  lo_send_mail->send_mail(
-    EXPORTING
-      xs_mail_params   = VALUE #(
-                            sender      = sy-uname
-                            recipients  = lt_recipients[]
-                            object      = 'Mail Object'
-                            body        = 'Mail Body'
-                            body_stdtxt = ls_mail_body_stdtxt
-                            attachments = lt_attch[]
-                         )
-      xv_commit        = abap_true
-    IMPORTING
-      y_mail_sent      = DATA(lv_mail_sent)
-      y_error_msg      = DATA(lv_error_msg)
-    EXCEPTIONS
-      missing_param    = 1
-      request_error    = 2
-      sender_error     = 3
-      recipient_error  = 4
-      body_error       = 5
-      attachment_error = 6
-      OTHERS           = 7
-  ).
-  IF sy-subrc <> 0
-    OR lv_mail_sent NE abap_true.
-    WRITE lv_error_msg.
-  ENDIF.
+  TRY.
+      DATA(lo_send_mail) = NEW zag_cl_send_mail( ).
+
+      DATA(lv_mail_sent) = lo_send_mail->send_mail( xs_mail_params = VALUE #(
+                                                                        sender      = sy-uname
+                                                                        recipients  = lt_recipients[]
+                                                                        object      = 'Mail Object'
+                                                                        body        = 'Mail Body'
+                                                                        body_stdtxt = ls_mail_body_stdtxt
+                                                                        attachments = lt_attch[]
+                                                                     )
+                                                     xv_commit      = abap_true
+      ).
+
+      IF lv_mail_sent NE abap_true.
+        WRITE 'Mail was not sent'.
+      ENDIF.
+
+    CATCH cx_ai_system_fault INTO DATA(lx_ai_system_fault). " Application Integration: Technical Error
+      WRITE lx_ai_system_fault->get_text( ).
+  ENDTRY.
 ```
