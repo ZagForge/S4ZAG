@@ -54,7 +54,9 @@
 *&        is_sort  = VALUE #( spos = 1 fieldname = 'MATNR' subtot = 'X' )
 *&      ).
 *&
-*& 6) Variant — opzionale:
+*& 6) Variant — opzionale, MA senza iv_report l'utente non può salvare
+*&    layout/varianti (vede solo "seleziona campi", il salvataggio resta
+*&    disabilitato perché l'ALV non sa a quale report agganciarle):
 *&
 *&      lcl_config_manager=>set_variant(
 *&        iv_dynnr    = '0100'

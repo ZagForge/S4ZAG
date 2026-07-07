@@ -66,6 +66,14 @@ START-OF-SELECTION.
     iv_title     = 'ZTIT_0100'
   ).
 
+  " Senza questo, l'ALV non sa a quale report agganciare le varianti:
+  " il salvataggio del layout resta disabilitato (si vede solo "seleziona campi").
+  lcl_config_manager=>set_variant(
+    iv_dynnr    = c_dynnr_0100
+    iv_report   = sy-repid
+    iv_username = sy-uname
+  ).
+
   " Configurazione campi
   lcl_config_manager=>add_field_config( VALUE #(
     dynnr      = c_dynnr_0100
