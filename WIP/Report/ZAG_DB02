@@ -1,0 +1,372 @@
+*&---------------------------------------------------------------------*
+*& Report ZAG_DB02
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zag_db02.
+
+START-OF-SELECTION.
+
+  DATA: lv_statement TYPE string.
+
+  lv_statement = |{ lv_statement }SELECT   SQ_EXC_AGGR.HOST AS HOST ,                                                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.PORT AS PORT ,                                                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.SCHEMA_NAME AS SCHEMA_NAME ,                                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.TABLE_NAME AS TABLE_NAME ,                                                                                                                      |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.PART_ID AS PART_ID ,                                                                                                                            |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.SNAPSHOT_ID AS SNAPSHOT_ID ,                                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MEMORY_SIZE_IN_TOTAL AS MEMORY_SIZE_IN_TOTAL ,                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MEMORY_SIZE_IN_MAIN AS MEMORY_SIZE_IN_MAIN ,                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MEMORY_SIZE_IN_DELTA AS MEMORY_SIZE_IN_DELTA ,                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MEMORY_SIZE_IN_HISTORY_MAIN AS MEMORY_SIZE_IN_HISTORY_MAIN ,                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MEMORY_SIZE_IN_HISTORY_DELTA AS MEMORY_SIZE_IN_HISTORY_DELTA ,                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL AS ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL ,                                                                      |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.RECORD_COUNT AS RECORD_COUNT ,                                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.RAW_RECORD_COUNT_IN_MAIN AS RAW_RECORD_COUNT_IN_MAIN ,                                                                                          |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.RAW_RECORD_COUNT_IN_DELTA AS RAW_RECORD_COUNT_IN_DELTA ,                                                                                        |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.RAW_RECORD_COUNT_IN_HISTORY_MAIN AS RAW_RECORD_COUNT_IN_HISTORY_MAIN ,                                                                          |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.RAW_RECORD_COUNT_IN_HISTORY_DELTA AS RAW_RECORD_COUNT_IN_HISTORY_DELTA ,                                                                        |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_COMPRESSED_RECORD_COUNT AS LAST_COMPRESSED_RECORD_COUNT ,                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.IS_DELTA_LOADED_B AS IS_DELTA_LOADED_B ,                                                                                                        |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LOADED AS LOADED ,                                                                                                                              |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_MERGE_TIME AS LAST_MERGE_TIME ,                                                                                                            |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LOCATION AS LOCATION ,                                                                                                                          |.
+  lv_statement = |{ lv_statement }         0.0 AS PART_COUNT ,                                                                                                                                         |.
+  lv_statement = |{ lv_statement }         0.0 AS TABLE_COLUMN_COUNT ,                                                                                                                                 |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.CREATE_TIME AS CREATE_TIME ,                                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.IS_LOG_DELTA_B AS IS_LOG_DELTA_B ,                                                                                                              |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_ESTIMATED_MEMORY_SIZE AS LAST_ESTIMATED_MEMORY_SIZE ,                                                                                      |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_ESTIMATED_MEMORY_SIZE_TIME AS LAST_ESTIMATED_MEMORY_SIZE_TIME ,                                                                            |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_REPLAY_LOG_TIME AS LAST_REPLAY_LOG_TIME ,                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.LAST_TRUNCATION_TIME AS LAST_TRUNCATION_TIME ,                                                                                                  |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MAX_UDIV AS MAX_UDIV ,                                                                                                                          |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MERGE_COUNT AS MERGE_COUNT ,                                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.MODIFY_TIME AS MODIFY_TIME ,                                                                                                                    |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.PERSISTENT_MERGE_B AS PERSISTENT_MERGE_B ,                                                                                                      |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.READ_COUNT AS READ_COUNT ,                                                                                                                      |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.SERVER_TIMESTAMP AS SERVER_TIMESTAMP ,                                                                                                          |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.UNUSED_RETENTION_PERIOD AS UNUSED_RETENTION_PERIOD ,                                                                                            |.
+  lv_statement = |{ lv_statement }         SQ_EXC_AGGR.WRITE_COUNT AS WRITE_COUNT                                                                                                                      |.
+  lv_statement = |{ lv_statement }FROM     (SELECT   CREATE_TIME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   HOST ,                                                                                                                                            |.
+  lv_statement = |{ lv_statement }                   IS_DELTA_LOADED_B ,                                                                                                                               |.
+  lv_statement = |{ lv_statement }                   IS_LOG_DELTA_B ,                                                                                                                                  |.
+  lv_statement = |{ lv_statement }                   LOADED ,                                                                                                                                          |.
+  lv_statement = |{ lv_statement }                   LOCATION ,                                                                                                                                        |.
+  lv_statement = |{ lv_statement }                   MAX(ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL) AS ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL ,                                                                   |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_COMPRESSED_RECORD_COUNT) AS LAST_COMPRESSED_RECORD_COUNT ,                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_ESTIMATED_MEMORY_SIZE) AS LAST_ESTIMATED_MEMORY_SIZE ,                                                                                   |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_ESTIMATED_MEMORY_SIZE_TIME) AS LAST_ESTIMATED_MEMORY_SIZE_TIME ,                                                                         |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_MERGE_TIME) AS LAST_MERGE_TIME ,                                                                                                         |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_REPLAY_LOG_TIME) AS LAST_REPLAY_LOG_TIME ,                                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(LAST_TRUNCATION_TIME) AS LAST_TRUNCATION_TIME ,                                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(MAX_UDIV) AS MAX_UDIV ,                                                                                                                       |.
+  lv_statement = |{ lv_statement }                   MAX(MEMORY_SIZE_IN_DELTA) AS MEMORY_SIZE_IN_DELTA ,                                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(MEMORY_SIZE_IN_HISTORY_DELTA) AS MEMORY_SIZE_IN_HISTORY_DELTA ,                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(MEMORY_SIZE_IN_HISTORY_MAIN) AS MEMORY_SIZE_IN_HISTORY_MAIN ,                                                                                 |.
+  lv_statement = |{ lv_statement }                   MAX(MEMORY_SIZE_IN_MAIN) AS MEMORY_SIZE_IN_MAIN ,                                                                                                 |.
+  lv_statement = |{ lv_statement }                   MAX(MEMORY_SIZE_IN_TOTAL) AS MEMORY_SIZE_IN_TOTAL ,                                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(MERGE_COUNT) AS MERGE_COUNT ,                                                                                                                 |.
+  lv_statement = |{ lv_statement }                   MAX(RAW_RECORD_COUNT_IN_DELTA) AS RAW_RECORD_COUNT_IN_DELTA ,                                                                                     |.
+  lv_statement = |{ lv_statement }                   MAX(RAW_RECORD_COUNT_IN_HISTORY_DELTA) AS RAW_RECORD_COUNT_IN_HISTORY_DELTA ,                                                                     |.
+  lv_statement = |{ lv_statement }                   MAX(RAW_RECORD_COUNT_IN_HISTORY_MAIN) AS RAW_RECORD_COUNT_IN_HISTORY_MAIN ,                                                                       |.
+  lv_statement = |{ lv_statement }                   MAX(RAW_RECORD_COUNT_IN_MAIN) AS RAW_RECORD_COUNT_IN_MAIN ,                                                                                       |.
+  lv_statement = |{ lv_statement }                   MAX(READ_COUNT) AS READ_COUNT ,                                                                                                                   |.
+  lv_statement = |{ lv_statement }                   MAX(RECORD_COUNT) AS RECORD_COUNT ,                                                                                                               |.
+  lv_statement = |{ lv_statement }                   MAX(UNUSED_RETENTION_PERIOD) AS UNUSED_RETENTION_PERIOD ,                                                                                         |.
+  lv_statement = |{ lv_statement }                   MAX(WRITE_COUNT) AS WRITE_COUNT ,                                                                                                                 |.
+  lv_statement = |{ lv_statement }                   MODIFY_TIME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   PART_ID ,                                                                                                                                         |.
+  lv_statement = |{ lv_statement }                   PERSISTENT_MERGE_B ,                                                                                                                              |.
+  lv_statement = |{ lv_statement }                   PORT ,                                                                                                                                            |.
+  lv_statement = |{ lv_statement }                   SCHEMA_NAME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   SERVER_TIMESTAMP ,                                                                                                                                |.
+  lv_statement = |{ lv_statement }                   SNAPSHOT_ID ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   TABLE_NAME                                                                                                                                        |.
+  lv_statement = |{ lv_statement }          FROM     (SELECT   CASE HOST_COLUMN_TABLES_PART_SIZE.IS_DELTA_LOADED WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END AS IS_DELTA_LOADED_B ,         |.
+  lv_statement = |{ lv_statement }                             CASE HOST_COLUMN_TABLES_PART_SIZE.IS_LOG_DELTA WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END AS IS_LOG_DELTA_B ,               |.
+  lv_statement = |{ lv_statement }                             CASE HOST_COLUMN_TABLES_PART_SIZE.PERSISTENT_MERGE WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END AS PERSISTENT_MERGE_B ,       |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.CREATE_TIME AS CREATE_TIME ,                                                                               |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.HOST AS HOST ,                                                                                             |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.LOADED AS LOADED ,                                                                                         |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.MODIFY_TIME AS MODIFY_TIME ,                                                                               |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.PART_ID AS PART_ID ,                                                                                       |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.PORT AS PORT ,                                                                                             |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SCHEMA_NAME AS SCHEMA_NAME ,                                                                               |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SERVER_TIMESTAMP AS SERVER_TIMESTAMP ,                                                                     |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SNAPSHOT_ID AS SNAPSHOT_ID ,                                                                               |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.TABLE_NAME AS TABLE_NAME ,                                                                                 |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL) AS ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL ,                            |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_COMPRESSED_RECORD_COUNT) AS LAST_COMPRESSED_RECORD_COUNT ,                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_ESTIMATED_MEMORY_SIZE) AS LAST_ESTIMATED_MEMORY_SIZE ,                                            |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_ESTIMATED_MEMORY_SIZE_TIME) AS LAST_ESTIMATED_MEMORY_SIZE_TIME ,                                  |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_MERGE_TIME) AS LAST_MERGE_TIME ,                                                                  |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_REPLAY_LOG_TIME) AS LAST_REPLAY_LOG_TIME ,                                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.LAST_TRUNCATION_TIME) AS LAST_TRUNCATION_TIME ,                                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MAX_UDIV) AS MAX_UDIV ,                                                                                |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MEMORY_SIZE_IN_DELTA) AS MEMORY_SIZE_IN_DELTA ,                                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MEMORY_SIZE_IN_HISTORY_DELTA) AS MEMORY_SIZE_IN_HISTORY_DELTA ,                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MEMORY_SIZE_IN_HISTORY_MAIN) AS MEMORY_SIZE_IN_HISTORY_MAIN ,                                          |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MEMORY_SIZE_IN_MAIN) AS MEMORY_SIZE_IN_MAIN ,                                                          |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MEMORY_SIZE_IN_TOTAL) AS MEMORY_SIZE_IN_TOTAL ,                                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.MERGE_COUNT) AS MERGE_COUNT ,                                                                          |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.RAW_RECORD_COUNT_IN_DELTA) AS RAW_RECORD_COUNT_IN_DELTA ,                                              |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.RAW_RECORD_COUNT_IN_HISTORY_DELTA) AS RAW_RECORD_COUNT_IN_HISTORY_DELTA ,                              |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.RAW_RECORD_COUNT_IN_HISTORY_MAIN) AS RAW_RECORD_COUNT_IN_HISTORY_MAIN ,                                |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.RAW_RECORD_COUNT_IN_MAIN) AS RAW_RECORD_COUNT_IN_MAIN ,                                                |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.READ_COUNT) AS READ_COUNT ,                                                                            |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.RECORD_COUNT) AS RECORD_COUNT ,                                                                        |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.UNUSED_RETENTION_PERIOD) AS UNUSED_RETENTION_PERIOD ,                                                  |.
+  lv_statement = |{ lv_statement }                             MAX(HOST_COLUMN_TABLES_PART_SIZE.WRITE_COUNT) AS WRITE_COUNT ,                                                                          |.
+  lv_statement = |{ lv_statement }                             M_TABLE_LOCATIONS.LOCATION AS LOCATION                                                                                                  |.
+  lv_statement = |{ lv_statement }                    FROM      _SYS_STATISTICS.HOST_COLUMN_TABLES_PART_SIZE AS HOST_COLUMN_TABLES_PART_SIZE LEFT OUTER JOIN SYS.M_TABLE_LOCATIONS AS M_TABLE_LOCATIONS|.
+  lv_statement = |{ lv_statement }                               ON HOST_COLUMN_TABLES_PART_SIZE.SCHEMA_NAME = M_TABLE_LOCATIONS.SCHEMA_NAME AND                                                       |.
+  lv_statement = |{ lv_statement }                                  HOST_COLUMN_TABLES_PART_SIZE.TABLE_NAME = M_TABLE_LOCATIONS.TABLE_NAME AND                                                         |.
+  lv_statement = |{ lv_statement }                                  HOST_COLUMN_TABLES_PART_SIZE.PART_ID = M_TABLE_LOCATIONS.PART_ID AND                                                               |.
+  lv_statement = |{ lv_statement }                                  HOST_COLUMN_TABLES_PART_SIZE.PORT = M_TABLE_LOCATIONS.PORT AND                                                                     |.
+  lv_statement = |{ lv_statement }                                  HOST_COLUMN_TABLES_PART_SIZE.HOST = M_TABLE_LOCATIONS.HOST                                                                         |.
+  lv_statement = |{ lv_statement }                    WHERE    HOST_COLUMN_TABLES_PART_SIZE.SNAPSHOT_ID >=  TO_TIMESTAMP( ? ) AND                                                                      |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SNAPSHOT_ID <=  TO_TIMESTAMP( ? )                                                                          |.
+  lv_statement = |{ lv_statement }                    GROUP BY HOST_COLUMN_TABLES_PART_SIZE.HOST ,                                                                                                     |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.PORT ,                                                                                                     |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SCHEMA_NAME ,                                                                                              |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.TABLE_NAME ,                                                                                               |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.PART_ID ,                                                                                                  |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SNAPSHOT_ID ,                                                                                              |.
+  lv_statement = |{ lv_statement }                             CASE HOST_COLUMN_TABLES_PART_SIZE.IS_DELTA_LOADED WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END ,                              |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.LOADED ,                                                                                                   |.
+  lv_statement = |{ lv_statement }                             M_TABLE_LOCATIONS.LOCATION ,                                                                                                            |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.CREATE_TIME ,                                                                                              |.
+  lv_statement = |{ lv_statement }                             CASE HOST_COLUMN_TABLES_PART_SIZE.IS_LOG_DELTA WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END ,                                 |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.MODIFY_TIME ,                                                                                              |.
+  lv_statement = |{ lv_statement }                             CASE HOST_COLUMN_TABLES_PART_SIZE.PERSISTENT_MERGE WHEN 'TRUE' THEN 'X' WHEN 'FALSE' THEN '' ELSE '-' END ,                             |.
+  lv_statement = |{ lv_statement }                             HOST_COLUMN_TABLES_PART_SIZE.SERVER_TIMESTAMP ) AS SQ_STD_AGGR                                                                          |.
+  lv_statement = |{ lv_statement }          GROUP BY HOST ,                                                                                                                                            |.
+  lv_statement = |{ lv_statement }                   PORT ,                                                                                                                                            |.
+  lv_statement = |{ lv_statement }                   SCHEMA_NAME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   TABLE_NAME ,                                                                                                                                      |.
+  lv_statement = |{ lv_statement }                   PART_ID ,                                                                                                                                         |.
+  lv_statement = |{ lv_statement }                   SNAPSHOT_ID ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   IS_DELTA_LOADED_B ,                                                                                                                               |.
+  lv_statement = |{ lv_statement }                   LOADED ,                                                                                                                                          |.
+  lv_statement = |{ lv_statement }                   LOCATION ,                                                                                                                                        |.
+  lv_statement = |{ lv_statement }                   CREATE_TIME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   IS_LOG_DELTA_B ,                                                                                                                                  |.
+  lv_statement = |{ lv_statement }                   MODIFY_TIME ,                                                                                                                                     |.
+  lv_statement = |{ lv_statement }                   PERSISTENT_MERGE_B ,                                                                                                                              |.
+  lv_statement = |{ lv_statement }                   SERVER_TIMESTAMP ) AS SQ_EXC_AGGR                                                                                                                 |.
+  lv_statement = |{ lv_statement }ORDER BY MEMORY_SIZE_IN_DELTA DESC                                                                                                                                   |.
+  lv_statement = |{ lv_statement } LIMIT 100                                                                                                                                                           |..
+
+
+
+
+  TYPES:
+    BEGIN OF param_descr,
+      data_ref    TYPE REF TO data,
+      ind_ref     TYPE REF TO int2,
+      inout_type  TYPE typint1,
+      eval_ind(1) TYPE x,
+    END OF param_descr,
+
+    l_conda_t(80) TYPE x.
+
+  TYPES:
+     param_descr_tab TYPE STANDARD TABLE OF param_descr
+                          WITH DEFAULT KEY.
+
+  DATA: lv_con_name TYPE dbcon_name,
+        lv_con_da   TYPE l_conda_t.
+
+  DATA: ls_row TYPE hdb_column_tables_part_size,
+        lt_tab TYPE TABLE OF hdb_column_tables_part_size.
+
+  DATA: lo_second_con             TYPE REF TO cl_sql_connection.
+
+  DATA: lv_sql_code           TYPE i,
+        lv_sql_msg            TYPE dbsqlmsg,
+        lv_cursor             TYPE cursor,
+        lv_tab_name_for_trace TYPE tabname,
+        lv_hold_cursor        TYPE flag,
+        lt_param_tab          TYPE param_descr_tab.
+
+  DATA: lv_outvals_bound      TYPE flag,
+        lv_into_corresponding TYPE flag,
+        lv_upto               TYPE i,
+        lv_rows_ret           TYPE i.
+
+  DATA ls_param_tab LIKE LINE OF lt_param_tab.
+
+  "-------------------------------------------------
+
+  CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+                       ID 'FCODE'    FIELD 'DC'
+                       ID 'CONNAME'  FIELD lv_con_name
+                       ID 'CONDA'    FIELD lv_con_da.
+
+  "-------------------------------------------------
+
+  "CL_SQL_STATEMENT==============CP
+  "EXECUTE_QUERY (CL_SQL_STATEMENT)
+
+*->2024-09-19 11:47:09.000  {A:initial} 0 00
+*->9999-12-30 23:59:59.000  {A:initial} 0 00
+
+  DATA lv_timestamp TYPE string.
+
+  CONVERT DATE sy-datum TIME sy-uzeit
+    DAYLIGHT SAVING TIME sy-dayst
+    INTO TIME STAMP DATA(lv_curr_ts) TIME ZONE sy-zonlo.
+
+  CONVERT TIME STAMP lv_curr_ts
+  TIME ZONE 'UTC' INTO
+    DATE DATA(lv_sydatum)
+    TIME DATA(lv_syuzeit).
+
+  lv_syuzeit = lv_syuzeit - 3600.
+
+  lv_timestamp = |{ lv_sydatum DATE = ISO } { lv_syuzeit TIME = ISO }.000|.
+  ls_param_tab-data_ref = REF #( lv_timestamp ).
+  APPEND ls_param_tab TO  lt_param_tab.
+
+
+  "-------------------------------------------------
+
+  DATA: lv_date       TYPE d,
+        lv_time       TYPE t,
+        lv_timestamp2 TYPE string.
+
+  lv_date = '99991230'.
+  lv_time = '235959'.
+
+  lv_timestamp2 = |{ lv_date DATE = ISO } { lv_time TIME = ISO }.000|.
+  ls_param_tab-data_ref = REF #( lv_timestamp2 ).
+  APPEND ls_param_tab TO  lt_param_tab.
+
+
+  CALL 'C_DB_FUNCTION' ID 'FUNCTION'    FIELD 'DB_SQL'
+                       ID 'FCODE'       FIELD 'PO'
+                       ID 'CONNAME'     FIELD lv_con_name
+                       ID 'CONDA'       FIELD lv_con_da
+                       ID 'TAB_NAME'    FIELD lv_tab_name_for_trace
+                       ID 'STMT_STR'    FIELD lv_statement
+                       ID 'HOLD_CURSOR' FIELD lv_hold_cursor
+                       ID 'INVALS'      FIELD lt_param_tab
+                       ID 'CURSOR'      FIELD lv_cursor
+                       ID 'SQLCODE'     FIELD lv_sql_code
+                       ID 'SQLMSG'      FIELD lv_sql_msg.
+
+  CLEAR lt_param_tab[].
+
+  "-------------------------------------------------
+
+  DATA: rs_wa_ref TYPE REF TO data.
+  FIELD-SYMBOLS: <table> TYPE ANY TABLE.
+
+  DATA: gv_itab_ref      TYPE REF TO data,
+        gv_itab_line_ref TYPE REF TO data.
+
+
+  ASSIGN lt_tab TO <table>.
+  GET REFERENCE OF <table> INTO rs_wa_ref.
+
+  PERFORM set_param_table CHANGING rs_wa_ref.
+
+
+  FIELD-SYMBOLS: <line>   TYPE any,
+                 <outtab> TYPE ANY TABLE.
+
+
+
+  ASSIGN gv_itab_line_ref->* TO <line>.
+  ASSIGN gv_itab_ref->* TO <outtab>.
+
+  "CL_SQL_RESULT_SET
+  "NEXT_PACKAGE (CL_SQL_RESULT_SET)
+  CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+                     ID 'FCODE'    FIELD 'NP'
+                     ID 'CONNAME'  FIELD lv_con_name
+                     ID 'CONDA'    FIELD lv_con_da
+                     ID 'CURSOR'   FIELD lv_cursor
+                     ID 'BOUND'    FIELD lv_outvals_bound
+                     ID 'CORRESP'  FIELD lv_into_corresponding
+                     ID 'OUTVALS'  FIELD lt_param_tab
+                     ID 'OUTTAB'   FIELD <outtab>
+                     ID 'LINE'     FIELD <line>
+                     ID 'UPTO'     FIELD lv_upto
+                     ID 'ROWCNT'   FIELD lv_rows_ret
+                     ID 'SQLCODE'  FIELD lv_sql_code
+                     ID 'SQLMSG'   FIELD lv_sql_msg.
+
+  WRITE: lv_sql_code, /, lv_sql_msg.
+
+  "-------------------------------------------------
+
+* close cursor
+  CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+                     ID 'FCODE'    FIELD 'CC'
+                     ID 'CONNAME'  FIELD lv_con_name
+                     ID 'CONDA'    FIELD lv_con_da
+                     ID 'CURSOR'   FIELD lv_cursor.
+
+  CALL 'C_DB_FUNCTION' ID 'FUNCTION' FIELD 'DB_SQL'
+                     ID 'FCODE'    FIELD 'FC'
+                     ID 'CONNAME'  FIELD lv_con_name
+                     ID 'CONDA'    FIELD lv_con_da
+                     ID 'CURSOR'   FIELD lv_cursor.
+
+
+FORM set_param_table CHANGING itab_ref.
+
+  DATA:
+    tdescr_p      TYPE REF TO cl_abap_typedescr,
+    table_descr_p TYPE REF TO cl_abap_tabledescr.
+
+  FIELD-SYMBOLS: <itab> TYPE ANY TABLE.
+
+  tdescr_p = cl_abap_typedescr=>describe_by_data_ref( itab_ref ).
+
+
+  ASSIGN itab_ref->* TO <itab>.
+  CREATE DATA gv_itab_line_ref LIKE LINE OF <itab>.
+
+  PERFORM set_param_struct CHANGING gv_itab_line_ref.
+  gv_itab_ref = itab_ref.
+
+ENDFORM.
+FORM set_param_struct CHANGING struct_ref.
+
+  DATA:
+    tdescr_p TYPE REF TO cl_abap_typedescr,
+    sdescr_p TYPE REF TO cl_abap_structdescr.
+
+  tdescr_p = cl_abap_typedescr=>describe_by_data_ref( struct_ref ).
+  sdescr_p ?= tdescr_p.
+
+  LOOP AT sdescr_p->components ASSIGNING FIELD-SYMBOL(<comp>).
+
+    PERFORM add_comp_ref CHANGING struct_ref
+                                  <comp>.
+  ENDLOOP.
+
+ENDFORM.
+FORM add_comp_ref CHANGING struct_ref TYPE REF TO data
+                           comp_descr TYPE abap_compdescr.
+
+
+  FIELD-SYMBOLS:
+    <param> LIKE LINE OF lt_param_tab,
+    <f>     TYPE any.
+
+*   derefernce given DATA_REF
+  FIELD-SYMBOLS <struct> TYPE any.
+  ASSIGN struct_ref->* TO <struct>.
+
+* get a reference to the specified component of the structure and append
+* it to PARAM_TAB
+  ASSIGN COMPONENT comp_descr-name OF STRUCTURE <struct> TO <f>.
+  APPEND INITIAL LINE TO lt_param_tab ASSIGNING <param>.
+  GET REFERENCE OF <f> INTO <param>-data_ref.
+
+
+ENDFORM.
