@@ -475,6 +475,108 @@ Quando il test funziona, si sostituisce il corpo di `PROCESS_INBOUND` con la log
 
 ---
 
+# PARTE C — Alternativa quando l'ICM è gestito da terzi
+
+Tutta la Parte A presuppone di poter intervenire su ICM/SICF/SCOT. Se l'ICM è gestito da un fornitore/team esterno e aprire una porta SMTP inbound comporta un onere organizzativo sproporzionato rispetto al caso d'uso, conviene **non toccare affatto il canale SMTP di SAP** e spostare il "catch" della richiesta esterna fuori da SAP, su un livello ponte che poi chiama semplicemente le **OData** già disponibili in intranet.
+
+## C1. Quando usarla
+
+- Il caso d'uso è "far arrivare una richiesta/ticket da un utente esterno", non necessariamente una vera casella mail SAP.
+- Le OData necessarie sono già esposte in intranet (create/aggiornamento ticket, ecc.).
+- Coinvolgere il fornitore esterno dell'ICM per il canale SMTP è complesso o lento; il proprio IT interno può però esporre un canale alternativo o attivare strumenti già disponibili in M365.
+
+## C2. Principio architetturale
+
+Non si fa arrivare la mail dentro SAP: si intercetta il canale esterno (mail e/o form) **fuori** da SAP, si applicano lì i controlli (whitelist, validazione, dedup), e solo alla fine si chiama l'OData interna. SAP non riceve mai SMTP grezzo; riceve solo chiamate OData autenticate, che è il tipo di traffico che l'infrastruttura già gestisce normalmente.
+
+```
+Utente esterno
+   │
+   ├─ mail a supporto@miodominio.com  (casella condivisa, non distribution list)
+   └─ form pubblico
+              │
+              ▼
+   [Orchestratore: Power Automate oppure servizio applicativo custom]
+   - whitelist mittente/dominio
+   - validazione dati
+   - dedup / marcatura "processato"
+   - log della richiesta
+              │
+              ▼
+   Connettività verso l'intranet
+   (On-premises Data Gateway, oppure regola di rete dedicata)
+              │
+              ▼
+       OData SAP (intranet) → crea ticket/richiesta
+              │
+              ▼
+   Risposta automatica al mittente (conferma + ID ticket)
+```
+
+Punto chiave sulla mail: se si vuole intercettarla, serve una **casella condivisa** (shared mailbox, es. `supporto@miodominio.com`), non una distribution list — quest'ultima inoltra solo ai membri e non ha un proprio inbox su cui agganciare un trigger.
+
+## C3. Due opzioni di implementazione
+
+| | Opzione A — Microsoft 365 / Power Automate | Opzione B — VM applicativa in DMZ |
+| --- | --- | --- |
+| Form pubblico | Microsoft Forms (incluso in M365) | Pagina/route custom sulla VM |
+| Cattura mail | Trigger nativo "nuova mail" su casella condivisa | Webhook su Microsoft Graph API verso una route della VM |
+| Orchestratore | Flow Power Automate (whitelist, validazione, dedup, log) | Codice custom (es. Flask) sulla VM |
+| Connettività verso OData | **On-premises Data Gateway** (Microsoft), installato su una macchina interna che raggiunge l'OData; connessione solo in uscita, nessuna porta da aprire | Regola firewall dedicata: 443 in ingresso solo verso la VM (con alias DNS + TLS) e outbound ristretto dalla VM verso host:porta dell'OData |
+| Dipendenza | Licenza Power Automate (verificare se serve Premium per l'azione verso il gateway) | Manutenzione continuativa del server (patch, certificato TLS, uptime, monitoraggio) — tipicamente richiede coinvolgere un team infra/sicurezza nel tempo |
+| Adatto se | Non si vuole gestire infrastruttura server nel tempo; il team non ha competenze di rete | Si preferisce controllo pieno via codice e non c'è disponibilità/licenza Premium |
+
+**Nota sulla portabilità:** cambiare in futuro da un'opzione all'altra richiede riscrivere solo il livello orchestratore (logica di whitelist/validazione/dedup nel nuovo linguaggio/strumento) e il meccanismo di connettività (gateway vs regola di rete). Restano invariati: il contratto OData lato SAP, l'utente tecnico e le relative autorizzazioni, la casella condivisa, e i requisiti funzionali stessi.
+
+## C4. Requisiti funzionali obbligatori fin dal primo giorno
+
+Non differibili a una fase successiva, indipendentemente dall'opzione scelta:
+
+1. **Whitelist mittenti/domini** — check preliminare prima di processare qualsiasi submission o mail; se non in whitelist, scarto silenzioso (o coda per revisione manuale), non arriva mai a toccare l'OData.
+2. **Validazione input** — campi obbligatori e formati corretti prima della chiamata OData.
+3. **Idempotenza/dedup** — mail processate marcate/spostate per non essere rielaborate dal trigger; per il form, un token/ID di submission per evitare doppio invio.
+4. **Riscontro automatico al mittente** — conferma con ID ticket, sia per mail che per form.
+5. **Logging di ogni richiesta** (chi, quando, canale, esito) — necessario per troubleshooting/audit fin dal primo giorno.
+
+## C5. Scalabilità futura: app Fiori esterna
+
+L'architettura non esclude un domani un'app Fiori per l'apertura ticket: si aggiunge come un ulteriore canale che chiama la stessa OData, senza toccare mail/form. La differenza sostanziale è il modello di fiducia: mail/form funzionano in modo anonimo (whitelist su dominio/mittente), mentre un'app Fiori per utenti esterni richiede una vera identità/login. La strada tipica è **SAP BTP + Identity Authentication Service (IAS)** per gestire l'identità di clienti/fornitori esterni, con il Launchpad esposto tramite **SAP Cloud Connector** (stesso principio "connessione solo in uscita" già usato per il gateway M365). Scegliere fin da subito un service user OData con autorizzazioni ben segregate facilita l'aggiunta di questo layer in un secondo momento.
+
+## C6. Traccia email da inviare all'IT
+
+Da adattare con i propri riferimenti; lascia volutamente a IT la scelta tra le due opzioni in base a licenze/capacità disponibili.
+
+> **Oggetto:** Richiesta pilota — raccolta richieste esterne verso SAP (form + mail), nessun impatto su ICM — valutazione soluzione
+>
+> Ciao [Nome],
+>
+> vorrei attivare un piccolo pilota per permettere a utenti esterni (clienti/fornitori) di inviare ticket/richieste che vengano create automaticamente sul nostro SAP, tramite le OData già disponibili in intranet — **senza toccare l'ICM SAP**, che so essere gestito dal fornitore esterno.
+>
+> L'idea di massima (schema sotto) è: l'utente esterno scrive a una casella mail dedicata oppure compila un form pubblico → un livello intermedio valida/filtra la richiesta → chiama la nostra OData interna per creare il ticket.
+>
+> Il nostro team lavora su ABAP/Fiori, non abbiamo competenze di infrastruttura di rete, quindi vi giro due possibili strade e vorrei un vostro parere su quale sia più adatta con quello che avete già in casa — non abbiamo una preferenza vincolante, l'obiettivo è la funzionalità:
+>
+> **Opzione A — Microsoft 365 / Power Automate**
+> - Casella condivisa `supporto@miodominio.com`
+> - Microsoft Forms per il form pubblico
+> - Power Automate come orchestratore (richiede verificare se abbiamo licenza Premium, necessaria per l'azione verso il gateway)
+> - On-premises Data Gateway installato su una macchina interna che raggiunge l'OData (connessione solo in uscita, nessuna porta da aprire in ingresso)
+>
+> **Opzione B — Piccola VM in DMZ**
+> - Una VM (anche minimale) con un servizio applicativo che espone solo la route del form/webhook
+> - Regola firewall in ingresso: solo 443, solo verso quella VM, con alias DNS e certificato TLS
+> - Regola firewall in uscita dalla VM: solo verso host:porta della nostra OData
+> - Comporta la vostra gestione continuativa del server (patch, certificato, uptime)
+>
+> Vi chiederei di dirci quale delle due è preferibile per voi, tenendo conto di licenze Power Automate disponibili e capacità di gestire una VM esposta nel tempo. È un progetto **sperimentale/pilota**: se vedete criticità di rete/sicurezza in una o entrambe le proposte, o avete un'alternativa che non abbiamo considerato, siamo aperti — l'obiettivo è la funzionalità, non l'implementazione specifica.
+>
+> Disponibili per una call se serve confrontarci prima di decidere.
+>
+> Grazie,
+> [Il tuo nome]
+
+---
+
 ### Note di release
 
 Su S/4HANA recenti i nomi dei menu SCOT, i path SICF e le firme di `IF_INBOUND_EXIT_BCS` / `IF_DOCUMENT_BCS` possono differire leggermente. Verificare sempre i nomi esatti di metodi e tipi in **SE24** sul sistema di destinazione prima dello sviluppo definitivo.
