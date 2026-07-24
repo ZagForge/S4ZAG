@@ -47,6 +47,7 @@ public section.
   types:
     tt_table_size TYPE TABLE OF ts_table_size WITH DEFAULT KEY .
 
+  methods CONSTRUCTOR .
     " === Entry point combinato: top N + storico ===
   methods GET_TABLE_GROWTH
     importing
@@ -89,6 +90,12 @@ public section.
         date_field TYPE fieldname,
       END OF ts_date_field_map,
       tt_date_field_map TYPE TABLE OF ts_date_field_map WITH DEFAULT KEY.
+
+    " Valorizzati una sola volta in CONSTRUCTOR: non cambiano durante la vita
+    " dell'istanza, evitiamo di ricalcolarli ad ogni chiamata di metodo.
+    DATA mv_dbsys          TYPE syst_dbsys.
+    DATA mv_schema         TYPE char30.
+    DATA mt_date_field_map TYPE tt_date_field_map.
 
     " Output query HANA top N — l'ordine dei campi deve rispettare l'ordine SELECT
     TYPES:
@@ -220,6 +227,22 @@ ENDCLASS.
 
 
 CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
+
+
+  METHOD CONSTRUCTOR.
+    " ─────────────────────────────────────────────────────────────────
+    " Valorizzati una volta sola: sistema DB e mapping campo data non
+    " cambiano durante la vita dell'istanza.
+    " ─────────────────────────────────────────────────────────────────
+
+    mv_dbsys          = get_db_system( ).
+    mt_date_field_map = get_date_field_mapping( ).
+
+    CALL FUNCTION 'DB_DBSCHEMA'
+      IMPORTING
+        dbschema = mv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
+
+  ENDMETHOD.
 
 
   METHOD EXECUTE_HANA_QUERY.
@@ -516,25 +539,16 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     " indipendente da come sono state individuate (top N o input diretto)
     " ─────────────────────────────────────────────────────────────────
 
-    DATA(lv_dbsys) = get_db_system( ).
-
-    DATA lv_schema TYPE char30.
-    CALL FUNCTION 'DB_DBSCHEMA'
-      IMPORTING
-        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
-
-    DATA(lt_mapping) = get_date_field_mapping( ).
-
     LOOP AT xt_table_name INTO DATA(lv_tabname).
 
       DATA lt_growth TYPE tt_table_growth.
       DATA lt_errors TYPE tt_error.
 
-      CASE lv_dbsys.
+      CASE mv_dbsys.
 
         WHEN 'HDB'.
           " Su HANA serve il campo data dal mapping
-          READ TABLE lt_mapping INTO DATA(ls_map)
+          READ TABLE mt_date_field_map INTO DATA(ls_map)
             WITH KEY table_name = lv_tabname.
 
           IF sy-subrc <> 0.
@@ -549,7 +563,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
           get_history_hdb(
             EXPORTING
               xv_table_name  = lv_tabname
-              xv_schema_name = lv_schema
+              xv_schema_name = mv_schema
               xv_date_field  = ls_map-date_field
               xv_date_from   = xv_date_from
               xv_date_to     = xv_date_to
@@ -703,19 +717,12 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     " DISCOVERY: top N tabelle per dimensione, indipendente dallo storico
     " ─────────────────────────────────────────────────────────────────
 
-    DATA(lv_dbsys) = get_db_system( ).
-
-    DATA lv_schema TYPE char30.
-    CALL FUNCTION 'DB_DBSCHEMA'
-      IMPORTING
-        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
-
-    CASE lv_dbsys.
+    CASE mv_dbsys.
       WHEN 'HDB'.
         get_top_n_tables_hdb(
           EXPORTING
             xv_top_n  = xv_top_n
-            xv_schema = lv_schema
+            xv_schema = mv_schema
           IMPORTING
             yt_tables = yt_tables
             yt_errors = yt_errors ).
@@ -786,22 +793,15 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     " HDB: snapshot da M_CS_TABLES. MSS: ultimo snapshot da MSS_GET_TABHIST.
     " ─────────────────────────────────────────────────────────────────
 
-    DATA(lv_dbsys) = get_db_system( ).
-
-    DATA lv_schema TYPE char30.
-    CALL FUNCTION 'DB_DBSCHEMA'
-      IMPORTING
-        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
-
     LOOP AT xt_table_name INTO DATA(lv_tabname).
 
-      CASE lv_dbsys.
+      CASE mv_dbsys.
 
         WHEN 'HDB'.
           get_current_stats_hdb(
             EXPORTING
               xv_table_name  = lv_tabname
-              xv_schema_name = lv_schema
+              xv_schema_name = mv_schema
             IMPORTING
               ys_stats       = DATA(ls_cur)
               yt_errors      = DATA(lt_stats_errors) ).
