@@ -9,9 +9,8 @@ public section.
     " === Output unificato ===
     BEGIN OF ts_table_growth,
         table_name    TYPE tabname,
-        schema_name   TYPE char30,
         snapshot_date TYPE d,          " primo giorno del mese (YYYYMM01) su HDB, data campione su MSS
-        record_count  TYPE int8,       " record inseriti nel periodo
+        record_count  TYPE int8,       " record inseriti nel periodo (HDB) o totali a quella data (MSS)
         disk_mb       TYPE p LENGTH 8 DECIMALS 2, " stima MB (HDB) o dato reale (MSS)
       END OF ts_table_growth .
   types:
@@ -155,7 +154,6 @@ public section.
         yt_tables TYPE tt_top_table
         yt_errors TYPE tt_error.
 
-    " Interfaccia MSS_GET_TOP_N_TABLES da verificare (nomi parametri/campi potrebbero differire)
     METHODS get_top_n_tables_mss
       IMPORTING
         xv_top_n  TYPE i
@@ -174,7 +172,6 @@ public section.
         yt_growth      TYPE tt_table_growth
         yt_errors      TYPE tt_error.
 
-    " Campi MSSTABSTATS (rowcnt, reserved) da verificare
     METHODS get_history_mss
       IMPORTING
         xv_table_name TYPE tabname
@@ -412,7 +409,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     LOOP AT lt_months INTO DATA(ls_month).
       APPEND VALUE ts_table_growth(
         table_name    = xv_table_name
-        schema_name   = xv_schema_name
         snapshot_date = CONV d( ls_month-month_key && '01' )
         record_count  = ls_month-record_count
         disk_mb       = COND #(
@@ -468,8 +464,8 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       APPEND VALUE ts_table_growth(
         table_name    = CONV #( ls-tablename )
         snapshot_date = ls-sampledate
-        record_count  = ls-rowmodctr        " ⚠️ da verificare nome campo
-        disk_mb       = ls-reserved / 1024  " ⚠️ da verificare (reserved in KB?)
+        record_count  = ls-totalrows         " righe totali a quella data (reale)
+        disk_mb       = ls-reserved / 1024   " KB → MB, come MSSTOPLARGE-RESERVED
       ) TO yt_growth.
 
     ENDLOOP.
@@ -574,11 +570,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
             IMPORTING
               yt_growth     = lt_growth
               yt_errors     = lt_errors ).
-
-          " MSSTABSTATS non riporta lo schema: lo valorizziamo qui
-          LOOP AT lt_growth ASSIGNING FIELD-SYMBOL(<growth>).
-            <growth>-schema_name = lv_schema.
-          ENDLOOP.
 
       ENDCASE.
 
