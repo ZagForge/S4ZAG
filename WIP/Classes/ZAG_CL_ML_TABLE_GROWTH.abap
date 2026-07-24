@@ -1,44 +1,70 @@
-CLASS zml_cl_table_growth DEFINITION
-  PUBLIC
-  FINAL
-  CREATE PUBLIC.
+class ZAG_CL_ML_TABLE_GROWTH definition
+  public
+  final
+  create public .
 
-  PUBLIC SECTION.
+public section.
 
+  types:
     " === Output unificato ===
-    TYPES:
-      BEGIN OF ts_table_growth,
+    BEGIN OF ts_table_growth,
         table_name    TYPE tabname,
         schema_name   TYPE char30,
         snapshot_date TYPE d,          " primo giorno del mese (YYYYMM01) su HDB, data campione su MSS
         record_count  TYPE int8,       " record inseriti nel periodo
         disk_mb       TYPE p LENGTH 8 DECIMALS 2, " stima MB (HDB) o dato reale (MSS)
-      END OF ts_table_growth,
-      tt_table_growth TYPE TABLE OF ts_table_growth WITH DEFAULT KEY.
-
+      END OF ts_table_growth .
+  types:
+    tt_table_growth TYPE TABLE OF ts_table_growth WITH DEFAULT KEY .
+  types:
     " === Errori ===
     " Codici: NM = nessun mapping data, SE = sql error, FM = function module error
-    TYPES:
-      BEGIN OF ts_error,
+    BEGIN OF ts_error,
         table_name TYPE tabname,
         error_code TYPE sychar02,
         error_msg  TYPE string,
-      END OF ts_error,
-      tt_error TYPE TABLE OF ts_error WITH DEFAULT KEY.
+      END OF ts_error .
+  types:
+    tt_error TYPE TABLE OF ts_error WITH DEFAULT KEY .
+  types:
+    tt_tabname TYPE TABLE OF tabname WITH DEFAULT KEY .
+  types:
+    " Lista tabelle top N (dimensione/record count correnti)
+    BEGIN OF ts_top_table,
+        table_name  TYPE tabname,
+        schema_name TYPE char30,
+        disk_mb     TYPE p LENGTH 8 DECIMALS 2,
+        rec_count   TYPE int8,
+      END OF ts_top_table .
+  types:
+    tt_top_table TYPE TABLE OF ts_top_table WITH DEFAULT KEY .
 
-    TYPES: tt_tabname TYPE TABLE OF tabname WITH DEFAULT KEY.
-
-    " === Entry point ===
-    METHODS get_table_growth
-      IMPORTING
-        xt_table_name TYPE tt_tabname       OPTIONAL  " se vuoto → top N
-        xv_top_n      TYPE i                DEFAULT 20
-        xv_date_from  TYPE sy-datum         OPTIONAL
-        xv_date_to    TYPE sy-datum         OPTIONAL
-      EXPORTING
-        yt_growth     TYPE tt_table_growth
-        yt_errors     TYPE tt_error.
-
+    " === Entry point combinato: top N + storico ===
+  methods GET_TABLE_GROWTH
+    importing
+      !XT_TABLE_NAME type TT_TABNAME optional         " se vuoto → top N
+      !XV_TOP_N type I default 20
+      !XV_DATE_FROM type SY-DATUM optional
+      !XV_DATE_TO type SY-DATUM optional
+    exporting
+      !YT_GROWTH type TT_TABLE_GROWTH
+      !YT_ERRORS type TT_ERROR .
+    " === Solo discovery: top N tabelle per dimensione ===
+  methods GET_TOP_TABLES
+    importing
+      !XV_TOP_N type I default 20
+    exporting
+      !YT_TABLES type TT_TOP_TABLE
+      !YT_ERRORS type TT_ERROR .
+    " === Solo storico: crescita mensile per un elenco di tabelle note ===
+  methods GET_TABLE_HISTORY
+    importing
+      !XT_TABLE_NAME type TT_TABNAME
+      !XV_DATE_FROM type SY-DATUM optional
+      !XV_DATE_TO type SY-DATUM optional
+    exporting
+      !YT_GROWTH type TT_TABLE_GROWTH
+      !YT_ERRORS type TT_ERROR .
   PRIVATE SECTION.
 
     " Mapping tabella → campo data (usato solo su HDB per query stimata)
@@ -48,16 +74,6 @@ CLASS zml_cl_table_growth DEFINITION
         date_field TYPE fieldname,
       END OF ts_date_field_map,
       tt_date_field_map TYPE TABLE OF ts_date_field_map WITH DEFAULT KEY.
-
-    " Lista tabelle di lavoro (da top N o da filtro input)
-    TYPES:
-      BEGIN OF ts_top_table,
-        table_name  TYPE tabname,
-        schema_name TYPE char30,
-        disk_mb     TYPE p LENGTH 8 DECIMALS 2,
-        rec_count   TYPE int8,
-      END OF ts_top_table,
-      tt_top_table TYPE TABLE OF ts_top_table WITH DEFAULT KEY.
 
     " Output query HANA top N — l'ordine dei campi deve rispettare l'ordine SELECT
     TYPES:
@@ -159,11 +175,10 @@ ENDCLASS.
 
 
 
-CLASS zml_cl_table_growth IMPLEMENTATION.
+CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
 
-  METHOD execute_hana_query.
-
+  METHOD EXECUTE_HANA_QUERY.
     " ─────────────────────────────────────────────────────────────────
     " Binding output posizionale via SET_PARAM_TABLE; parametri di
     " input bindati in ordine con SET_PARAM (uno per ogni '?').
@@ -204,8 +219,8 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
 
   ENDMETHOD.
 
-  METHOD get_date_field_mapping.
 
+  METHOD GET_DATE_FIELD_MAPPING.
     " ─────────────────────────────────────────────────────────────────
     " MAPPING TABELLA → CAMPO DATA (solo percorso HDB)
     " Aggiungere righe qui per tabelle non presenti
@@ -256,8 +271,7 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_db_system.
-
+  METHOD GET_DB_SYSTEM.
     " ─────────────────────────────────────────────────────────────────
     " RILEVAMENTO DB
     " ─────────────────────────────────────────────────────────────────
@@ -267,8 +281,7 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_history_hdb.
-
+  METHOD GET_HISTORY_HDB.
     " ─────────────────────────────────────────────────────────────────
     " STORICO MENSILE — HDB (approccio rustico)
     "
@@ -325,8 +338,8 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
     ENDIF.
     IF xv_date_to IS NOT INITIAL.
       lv_conditions = |{ lv_conditions }| &&
-                      |{ COND #( WHEN lv_conditions IS NOT INITIAL THEN ' AND ' ELSE '' ) }| &&
-                      |{ xv_date_field } <= '{ xv_date_to }'|.
+                      | { COND #( WHEN lv_conditions IS NOT INITIAL THEN 'AND' ELSE '' ) }| &&
+                      | { xv_date_field } <= '{ xv_date_to }'|.
     ENDIF.
     DATA(lv_where) = COND string(
       WHEN lv_conditions IS NOT INITIAL
@@ -381,29 +394,36 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_history_mss.
-
-
+  METHOD GET_HISTORY_MSS.
     " ─────────────────────────────────────────────────────────────────
     " STORICO — MSS (tramite MSS_GET_TABHIST)
-    " ⚠️ Campi MSSTABSTATS da verificare: rowcnt, reserved
     " ─────────────────────────────────────────────────────────────────
 
     DATA lt_hist TYPE TABLE OF msstabstats WITH DEFAULT KEY.
 
+    " Solo TABNAME valorizzato: CON_NAME/SCHEMA/CURR_SCHEMA restano ai
+    " default della FM (connessione e schema correnti)
     CALL FUNCTION 'MSS_GET_TABHIST'
       EXPORTING
-        tabname       = xv_table_name
+        tabname        = xv_table_name
       TABLES
-        tabstats_list = lt_hist
+        tabstats_list  = lt_hist
       EXCEPTIONS
-        OTHERS        = 1.
+        internal_error = 1
+        db_error       = 2
+        connect_error  = 3
+        OTHERS         = 4.
 
     IF sy-subrc <> 0.
+      DATA(lv_reason) = SWITCH string( sy-subrc
+        WHEN 1 THEN 'INTERNAL_ERROR'
+        WHEN 2 THEN 'DB_ERROR'
+        WHEN 3 THEN 'CONNECT_ERROR'
+        ELSE 'UNKNOWN' ).
       APPEND VALUE ts_error(
         table_name = xv_table_name
         error_code = 'FM'
-        error_msg  = |MSS_GET_TABHIST { xv_table_name } failed: sy-subrc={ sy-subrc }|
+        error_msg  = |MSS_GET_TABHIST { xv_table_name } failed: { lv_reason } (sy-subrc={ sy-subrc })|
       ) TO yt_errors.
       RETURN.
     ENDIF.
@@ -426,55 +446,62 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_table_growth.
-
+  METHOD GET_TABLE_GROWTH.
     " ─────────────────────────────────────────────────────────────────
-    " ENTRY POINT
+    " ENTRY POINT COMBINATO — comodità: se non passi tabelle, prende il
+    " top N via GET_TOP_TABLES e ne calcola lo storico via GET_TABLE_HISTORY
     " ─────────────────────────────────────────────────────────────────
 
-    DATA lt_work_tables TYPE tt_top_table.
-    DATA(lv_dbsys)      = get_db_system( ).
-    DATA lv_schema      TYPE char30.
+    DATA lt_tables TYPE tt_tabname.
 
-    CALL FUNCTION 'DB_DBSCHEMA'
-      IMPORTING
-        dbschema = lv_schema. "ABAP Database or Access Schema
-
-    " ── 1. Determina lista tabelle ──────────────────────────────
     IF xt_table_name IS NOT INITIAL.
-
-      lt_work_tables = VALUE #( FOR <tabname> IN xt_table_name
-                                ( table_name = <tabname> )
-      ).
-
+      lt_tables = xt_table_name.
     ELSE.
-      " Top N dal database
-      CASE lv_dbsys.
-        WHEN 'HDB'.
-          get_top_n_tables_hdb(
-            EXPORTING
-              xv_top_n  = xv_top_n
-              xv_schema = lv_schema
-            IMPORTING
-              yt_tables = lt_work_tables
-              yt_errors = yt_errors ).
+      DATA lt_top TYPE tt_top_table.
+      get_top_tables(
+        EXPORTING
+          xv_top_n  = xv_top_n
+        IMPORTING
+          yt_tables = lt_top
+          yt_errors = yt_errors ).
 
-        WHEN 'MSS'.
-          get_top_n_tables_mss(
-            EXPORTING
-              xv_top_n  = xv_top_n
-            IMPORTING
-              yt_tables = lt_work_tables
-              yt_errors = yt_errors ).
-      ENDCASE.
+      lt_tables = VALUE #( FOR <top> IN lt_top ( <top>-table_name ) ).
     ENDIF.
 
-    CHECK lt_work_tables IS NOT INITIAL.
+    CHECK lt_tables IS NOT INITIAL.
 
-    " ── 2. Storico per ogni tabella ─────────────────────────────
+    DATA lt_history_errors TYPE tt_error.
+
+    get_table_history(
+      EXPORTING
+        xt_table_name = lt_tables
+        xv_date_from  = xv_date_from
+        xv_date_to    = xv_date_to
+      IMPORTING
+        yt_growth     = yt_growth
+        yt_errors     = lt_history_errors ).
+
+    APPEND LINES OF lt_history_errors TO yt_errors.
+
+  ENDMETHOD.
+
+
+  METHOD GET_TABLE_HISTORY.
+    " ─────────────────────────────────────────────────────────────────
+    " STORICO: crescita mensile per un elenco di tabelle note,
+    " indipendente da come sono state individuate (top N o input diretto)
+    " ─────────────────────────────────────────────────────────────────
+
+    DATA(lv_dbsys) = get_db_system( ).
+
+    DATA lv_schema TYPE char30.
+    CALL FUNCTION 'DB_DBSCHEMA'
+      IMPORTING
+        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
+
     DATA(lt_mapping) = get_date_field_mapping( ).
 
-    LOOP AT lt_work_tables INTO DATA(ls_tab).
+    LOOP AT xt_table_name INTO DATA(lv_tabname).
 
       DATA lt_growth TYPE tt_table_growth.
       DATA lt_errors TYPE tt_error.
@@ -484,23 +511,21 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
         WHEN 'HDB'.
           " Su HANA serve il campo data dal mapping
           READ TABLE lt_mapping INTO DATA(ls_map)
-            WITH KEY table_name = ls_tab-table_name.
+            WITH KEY table_name = lv_tabname.
 
           IF sy-subrc <> 0.
             APPEND VALUE ts_error(
-              table_name = ls_tab-table_name
+              table_name = lv_tabname
               error_code = 'NM'
-              error_msg  = |Nessun mapping campo data per { ls_tab-table_name } — aggiungere in get_date_field_mapping|
+              error_msg  = |Nessun mapping campo data per { lv_tabname } — aggiungere in get_date_field_mapping|
             ) TO yt_errors.
             CONTINUE.
           ENDIF.
 
           get_history_hdb(
             EXPORTING
-              xv_table_name  = ls_tab-table_name
-              xv_schema_name = COND #( WHEN ls_tab-schema_name IS NOT INITIAL
-                                       THEN ls_tab-schema_name
-                                       ELSE lv_schema )
+              xv_table_name  = lv_tabname
+              xv_schema_name = lv_schema
               xv_date_field  = ls_map-date_field
               xv_date_from   = xv_date_from
               xv_date_to     = xv_date_to
@@ -512,12 +537,17 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
           " Su MSS il mapping non serve: MSS_GET_TABHIST ha già lo storico
           get_history_mss(
             EXPORTING
-              xv_table_name = ls_tab-table_name
+              xv_table_name = lv_tabname
               xv_date_from  = xv_date_from
               xv_date_to    = xv_date_to
             IMPORTING
               yt_growth     = lt_growth
               yt_errors     = lt_errors ).
+
+          " MSSTABSTATS non riporta lo schema: lo valorizziamo qui
+          LOOP AT lt_growth ASSIGNING FIELD-SYMBOL(<growth>).
+            <growth>-schema_name = lv_schema.
+          ENDLOOP.
 
       ENDCASE.
 
@@ -530,8 +560,7 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_top_n_tables_hdb.
-
+  METHOD GET_TOP_N_TABLES_HDB.
     " ─────────────────────────────────────────────────────────────────
     " TOP N TABELLE — HDB (da M_CS_TABLES, snapshot corrente)
     " ─────────────────────────────────────────────────────────────────
@@ -585,49 +614,105 @@ CLASS zml_cl_table_growth IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD get_top_n_tables_mss.
-
+  METHOD GET_TOP_N_TABLES_MSS.
     " ─────────────────────────────────────────────────────────────────
-    " TOP N TABELLE — MSS
-    " ⚠️ Interfaccia MSS_GET_TOP_N_TABLES da verificare:
-    "    - nome parametro EXPORTING (topn / top_n / i_topn ?)
-    "    - nome tabella   TABLES    (top_tables / et_tables ?)
-    "    - campi risultato: tablename, owner, rows, reserved (KB)
+    " TOP N TABELLE — MSS (MSS_GET_TOP_N_TABLES, ORDER = 'L' → per dimensione)
+    " Solo NUMBER e ORDER valorizzati, resto ai default della FM.
+    " MSSTOPLARGE non riporta lo schema: schema_name resta vuoto qui.
     " ─────────────────────────────────────────────────────────────────
 
-    DATA: BEGIN OF ls_mss_tab,
-            tablename TYPE msstable,
-            owner     TYPE mssschema,
-            rows      TYPE int8,
-            reserved  TYPE int8,       " ⚠️ in KB, da verificare
-          END OF ls_mss_tab.
-    DATA lt_result LIKE TABLE OF ls_mss_tab.
+    DATA: BEGIN OF ls_large,
+            name      TYPE msstable,
+            used      TYPE mssusedsize,
+            reserved  TYPE mssressize,
+            data      TYPE mssdatasize,
+            rows      TYPE mssnumrows,
+            rowmodctr TYPE mssrowmodctr,
+          END OF ls_large.
+    DATA lt_large LIKE TABLE OF ls_large.
 
     CALL FUNCTION 'MSS_GET_TOP_N_TABLES'
       EXPORTING
-        topn       = xv_top_n           " ⚠️ da verificare nome parametro
+        number               = xv_top_n
+        order                = 'L'
       TABLES
-        top_tables = lt_result          " ⚠️ da verificare nome parametro
+        large_tables         = lt_large
       EXCEPTIONS
-        OTHERS     = 1.
+        not_running_on_mssql = 1
+        db_error             = 2
+        internal_error       = 3
+        db_not_found         = 4
+        no_db_access         = 5
+        schema_not_found     = 6
+        invalid_input        = 7
+        connect_error        = 8
+        OTHERS               = 9.
 
     IF sy-subrc <> 0.
+      DATA(lv_reason) = SWITCH string( sy-subrc
+        WHEN 1 THEN 'NOT_RUNNING_ON_MSSQL'
+        WHEN 2 THEN 'DB_ERROR'
+        WHEN 3 THEN 'INTERNAL_ERROR'
+        WHEN 4 THEN 'DB_NOT_FOUND'
+        WHEN 5 THEN 'NO_DB_ACCESS'
+        WHEN 6 THEN 'SCHEMA_NOT_FOUND'
+        WHEN 7 THEN 'INVALID_INPUT'
+        WHEN 8 THEN 'CONNECT_ERROR'
+        ELSE 'UNKNOWN' ).
       APPEND VALUE ts_error(
         table_name = '*'
         error_code = 'FM'
-        error_msg  = |MSS_GET_TOP_N_TABLES failed: sy-subrc={ sy-subrc }|
+        error_msg  = |MSS_GET_TOP_N_TABLES failed: { lv_reason } (sy-subrc={ sy-subrc })|
       ) TO yt_errors.
       RETURN.
     ENDIF.
 
-    LOOP AT lt_result INTO DATA(ls).
+    LOOP AT lt_large INTO ls_large.
       APPEND VALUE ts_top_table(
-        table_name  = ls-tablename
-        schema_name = ls-owner
-        rec_count   = ls-rows
-        disk_mb     = ls-reserved / 1024  " KB → MB
+        table_name = ls_large-name
+        rec_count  = ls_large-rows
+        disk_mb    = ls_large-reserved / 1024  " KB → MB
       ) TO yt_tables.
     ENDLOOP.
+
+  ENDMETHOD.
+
+
+  METHOD GET_TOP_TABLES.
+    " ─────────────────────────────────────────────────────────────────
+    " DISCOVERY: top N tabelle per dimensione, indipendente dallo storico
+    " ─────────────────────────────────────────────────────────────────
+
+    DATA(lv_dbsys) = get_db_system( ).
+
+    DATA lv_schema TYPE char30.
+    CALL FUNCTION 'DB_DBSCHEMA'
+      IMPORTING
+        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
+
+    CASE lv_dbsys.
+      WHEN 'HDB'.
+        get_top_n_tables_hdb(
+          EXPORTING
+            xv_top_n  = xv_top_n
+            xv_schema = lv_schema
+          IMPORTING
+            yt_tables = yt_tables
+            yt_errors = yt_errors ).
+
+      WHEN 'MSS'.
+        get_top_n_tables_mss(
+          EXPORTING
+            xv_top_n  = xv_top_n
+          IMPORTING
+            yt_tables = yt_tables
+            yt_errors = yt_errors ).
+
+        " MSSTOPLARGE non riporta lo schema: lo valorizziamo qui
+        LOOP AT yt_tables ASSIGNING FIELD-SYMBOL(<top>).
+          <top>-schema_name = lv_schema.
+        ENDLOOP.
+    ENDCASE.
 
   ENDMETHOD.
 ENDCLASS.
