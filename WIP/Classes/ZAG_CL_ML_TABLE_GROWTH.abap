@@ -11,7 +11,7 @@ public section.
         table_name    TYPE tabname,
         snapshot_date TYPE d,          " primo giorno del mese (YYYYMM01) su HDB, data campione su MSS
         record_count  TYPE int8,       " record inseriti nel periodo (HDB) o totali a quella data (MSS)
-        disk_mb       TYPE p LENGTH 8 DECIMALS 2, " stima MB (HDB) o dato reale (MSS)
+        disk_bytes    TYPE int8,       " stima in byte (HDB) o dato reale (MSS)
       END OF ts_table_growth .
   types:
     tt_table_growth TYPE TABLE OF ts_table_growth WITH DEFAULT KEY .
@@ -31,12 +31,21 @@ public section.
     " Lista tabelle top N (dimensione/record count correnti)
     BEGIN OF ts_top_table,
         table_name    TYPE tabname,
-        disk_mb       TYPE p LENGTH 8 DECIMALS 2,
+        disk_bytes    TYPE int8,
         rec_count     TYPE int8,
         mod_indicator TYPE int8, " attività recente: ROWMODCTR (MSS) / delta bytes (HDB)
       END OF ts_top_table .
   types:
     tt_top_table TYPE TABLE OF ts_top_table WITH DEFAULT KEY .
+  types:
+    " Peso attuale di una o più tabelle specifiche (non solo top N)
+    BEGIN OF ts_table_size,
+        table_name TYPE tabname,
+        rec_count  TYPE int8,
+        disk_bytes TYPE int8,
+      END OF ts_table_size .
+  types:
+    tt_table_size TYPE TABLE OF ts_table_size WITH DEFAULT KEY .
 
     " === Entry point combinato: top N + storico ===
   methods GET_TABLE_GROWTH
@@ -63,6 +72,13 @@ public section.
       !XV_DATE_TO type SY-DATUM optional
     exporting
       !YT_GROWTH type TT_TABLE_GROWTH
+      !YT_ERRORS type TT_ERROR .
+    " === Peso attuale di un elenco di tabelle note ===
+  methods GET_TABLE_SIZE
+    importing
+      !XT_TABLE_NAME type TT_TABNAME
+    exporting
+      !YT_SIZES type TT_TABLE_SIZE
       !YT_ERRORS type TT_ERROR .
   PRIVATE SECTION.
 
@@ -160,6 +176,14 @@ public section.
       EXPORTING
         yt_tables TYPE tt_top_table
         yt_errors TYPE tt_error.
+
+    METHODS get_current_stats_hdb
+      IMPORTING
+        xv_table_name  TYPE tabname
+        xv_schema_name TYPE char30
+      EXPORTING
+        ys_stats       TYPE ts_hdb_cur_stats
+        yt_errors      TYPE tt_error.
 
     METHODS get_history_hdb
       IMPORTING
@@ -307,7 +331,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     "
     " 1. Legge stats correnti da M_CS_TABLES → calcola bytes/riga
     " 2. COUNT(*) GROUP BY mese sul campo data mappato
-    " 3. Stima disk_mb = record_mese * bytes_per_riga_corrente / 1024 / 1024
+    " 3. Stima disk_bytes = record_mese * bytes_per_riga_corrente
     "    (approssimazione per ML: trend corretto, valore assoluto stimato)
     " ─────────────────────────────────────────────────────────────────
 
@@ -315,49 +339,25 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     DATA lv_msg  TYPE dbsqlmsg.
 
     " ── 1. Stats correnti per stima bytes/riga ─────────────────
-    DATA lt_cur TYPE tt_hdb_cur_stats.
-    DATA lr_cur TYPE REF TO data.
-    GET REFERENCE OF lt_cur INTO lr_cur.
-
-    DATA lv_statement TYPE string.
-
-    lv_statement = |SELECT RECORD_COUNT, MEMORY_SIZE_IN_TOTAL, |
-                   && |MEMORY_SIZE_IN_MAIN, MEMORY_SIZE_IN_DELTA, MEMORY_SIZE_IN_MISC, |
-                   && |ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL, LAST_ESTIMATED_MEMORY_SIZE, |
-                   && |LAST_ESTIMATED_MEMORY_SIZE_TIME, |
-                   && |RAW_RECORD_COUNT_IN_MAIN, RAW_RECORD_COUNT_IN_DELTA, |
-                   && |LAST_COMPRESSED_RECORD_COUNT, MAX_UDIV, MAX_ROWID, |
-                   && |CREATE_TIME, MODIFY_TIME, LAST_MERGE_TIME, |
-                   && |LAST_REPLAY_LOG_TIME, LAST_CONSISTENCY_CHECK_TIME, |
-                   && |READ_COUNT, WRITE_COUNT, MERGE_COUNT |
-                   && |FROM M_CS_TABLES |
-                   && |WHERE SCHEMA_NAME = '{ xv_schema_name }' |
-                   && |AND TABLE_NAME = '{ xv_table_name }'|.
-
-    execute_hana_query(
+    get_current_stats_hdb(
       EXPORTING
-        xv_statement = lv_statement
-        xt_inparams  = VALUE tt_param( )
+        xv_table_name  = xv_table_name
+        xv_schema_name = xv_schema_name
       IMPORTING
-        yv_sql_code  = lv_code
-        yv_sql_msg   = lv_msg
-      CHANGING
-        xyt_outtab   = lr_cur ).
+        ys_stats       = DATA(ls_cur)
+        yt_errors      = DATA(lt_stats_errors) ).
 
-    IF lv_code <> 0.
-      APPEND VALUE ts_error(
-        table_name = xv_table_name
-        error_code = 'SE'
-        error_msg  = |Stats correnti { xv_table_name }: { lv_msg }|
-      ) TO yt_errors.
+    IF lt_stats_errors IS NOT INITIAL.
+      APPEND LINES OF lt_stats_errors TO yt_errors.
       RETURN.
     ENDIF.
 
-    READ TABLE lt_cur INTO DATA(ls_cur) INDEX 1.
     DATA(lv_bytes_per_row) = COND int8(
       WHEN ls_cur-rec_count > 0
       THEN ls_cur-disk_bytes / ls_cur-rec_count
       ELSE 0 ).
+
+    DATA lv_statement TYPE string.
 
     " ── 2. Costruisce WHERE per filtro date ────────────────────
     DATA lv_conditions TYPE string.
@@ -411,10 +411,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
         table_name    = xv_table_name
         snapshot_date = CONV d( ls_month-month_key && '01' )
         record_count  = ls_month-record_count
-        disk_mb       = COND #(
-          WHEN lv_bytes_per_row > 0
-          THEN CONV #( ls_month-record_count * lv_bytes_per_row / 1024 / 1024 )
-          ELSE 0 )
+        disk_bytes    = ls_month-record_count * lv_bytes_per_row
       ) TO yt_growth.
     ENDLOOP.
 
@@ -465,7 +462,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
         table_name    = CONV #( ls-tablename )
         snapshot_date = ls-sampledate
         record_count  = ls-totalrows         " righe totali a quella data (reale)
-        disk_mb       = ls-reserved / 1024   " KB → MB, come MSSTOPLARGE-RESERVED
+        disk_bytes    = ls-reserved * 1024   " KB → byte, come MSSTOPLARGE-RESERVED
       ) TO yt_growth.
 
     ENDLOOP.
@@ -629,7 +626,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       APPEND VALUE ts_top_table(
         table_name    = ls-table_name
         rec_count     = ls-rec_count
-        disk_mb       = ls-disk_bytes / 1024 / 1024
+        disk_bytes    = ls-disk_bytes
         mod_indicator = ls-delta_bytes
       ) TO yt_tables.
     ENDLOOP.
@@ -693,7 +690,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       APPEND VALUE ts_top_table(
         table_name    = ls_large-name
         rec_count     = ls_large-rows
-        disk_mb       = ls_large-reserved / 1024  " KB → MB
+        disk_bytes    = ls_large-reserved * 1024  " KB → byte
         mod_indicator = ls_large-rowmodctr
       ) TO yt_tables.
     ENDLOOP.
@@ -731,6 +728,119 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
             yt_tables = yt_tables
             yt_errors = yt_errors ).
     ENDCASE.
+
+  ENDMETHOD.
+
+
+  METHOD GET_CURRENT_STATS_HDB.
+    " ─────────────────────────────────────────────────────────────────
+    " STATS CORRENTI TABELLA — HDB (da M_CS_TABLES, snapshot attuale)
+    " Estratto da GET_HISTORY_HDB per essere riusabile anche da GET_TABLE_SIZE.
+    " ─────────────────────────────────────────────────────────────────
+
+    DATA lt_cur TYPE tt_hdb_cur_stats.
+    DATA lr_cur TYPE REF TO data.
+    GET REFERENCE OF lt_cur INTO lr_cur.
+
+    DATA(lv_statement) =
+      |SELECT RECORD_COUNT, MEMORY_SIZE_IN_TOTAL, |
+      && |MEMORY_SIZE_IN_MAIN, MEMORY_SIZE_IN_DELTA, MEMORY_SIZE_IN_MISC, |
+      && |ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL, LAST_ESTIMATED_MEMORY_SIZE, |
+      && |LAST_ESTIMATED_MEMORY_SIZE_TIME, |
+      && |RAW_RECORD_COUNT_IN_MAIN, RAW_RECORD_COUNT_IN_DELTA, |
+      && |LAST_COMPRESSED_RECORD_COUNT, MAX_UDIV, MAX_ROWID, |
+      && |CREATE_TIME, MODIFY_TIME, LAST_MERGE_TIME, |
+      && |LAST_REPLAY_LOG_TIME, LAST_CONSISTENCY_CHECK_TIME, |
+      && |READ_COUNT, WRITE_COUNT, MERGE_COUNT |
+      && |FROM M_CS_TABLES |
+      && |WHERE SCHEMA_NAME = '{ xv_schema_name }' |
+      && |AND TABLE_NAME = '{ xv_table_name }'|.
+
+    execute_hana_query(
+      EXPORTING
+        xv_statement = lv_statement
+        xt_inparams  = VALUE tt_param( )
+      IMPORTING
+        yv_sql_code  = DATA(lv_code)
+        yv_sql_msg   = DATA(lv_msg)
+      CHANGING
+        xyt_outtab   = lr_cur ).
+
+    IF lv_code <> 0.
+      APPEND VALUE ts_error(
+        table_name = xv_table_name
+        error_code = 'SE'
+        error_msg  = |Stats correnti { xv_table_name }: { lv_msg }|
+      ) TO yt_errors.
+      RETURN.
+    ENDIF.
+
+    READ TABLE lt_cur INTO ys_stats INDEX 1.
+
+  ENDMETHOD.
+
+
+  METHOD GET_TABLE_SIZE.
+    " ─────────────────────────────────────────────────────────────────
+    " PESO ATTUALE — per un elenco di tabelle note (non solo top N)
+    " HDB: snapshot da M_CS_TABLES. MSS: ultimo snapshot da MSS_GET_TABHIST.
+    " ─────────────────────────────────────────────────────────────────
+
+    DATA(lv_dbsys) = get_db_system( ).
+
+    DATA lv_schema TYPE char30.
+    CALL FUNCTION 'DB_DBSCHEMA'
+      IMPORTING
+        dbschema = lv_schema. "ABAP Database or Access Schema — valida sia su HDB che su MSS
+
+    LOOP AT xt_table_name INTO DATA(lv_tabname).
+
+      CASE lv_dbsys.
+
+        WHEN 'HDB'.
+          get_current_stats_hdb(
+            EXPORTING
+              xv_table_name  = lv_tabname
+              xv_schema_name = lv_schema
+            IMPORTING
+              ys_stats       = DATA(ls_cur)
+              yt_errors      = DATA(lt_stats_errors) ).
+
+          APPEND LINES OF lt_stats_errors TO yt_errors.
+
+          IF lt_stats_errors IS INITIAL.
+            APPEND VALUE ts_table_size(
+              table_name = lv_tabname
+              rec_count  = ls_cur-rec_count
+              disk_bytes = ls_cur-disk_bytes
+            ) TO yt_sizes.
+          ENDIF.
+
+        WHEN 'MSS'.
+          get_history_mss(
+            EXPORTING
+              xv_table_name = lv_tabname
+            IMPORTING
+              yt_growth     = DATA(lt_hist)
+              yt_errors     = DATA(lt_hist_errors) ).
+
+          APPEND LINES OF lt_hist_errors TO yt_errors.
+
+          IF lt_hist IS NOT INITIAL.
+            SORT lt_hist BY snapshot_date DESCENDING.
+            READ TABLE lt_hist INTO DATA(ls_latest) INDEX 1.
+            APPEND VALUE ts_table_size(
+              table_name = lv_tabname
+              rec_count  = ls_latest-record_count
+              disk_bytes = ls_latest-disk_bytes
+            ) TO yt_sizes.
+          ENDIF.
+
+      ENDCASE.
+
+      CLEAR: lt_stats_errors, lt_hist, lt_hist_errors.
+
+    ENDLOOP.
 
   ENDMETHOD.
 ENDCLASS.
