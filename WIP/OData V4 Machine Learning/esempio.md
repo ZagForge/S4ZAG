@@ -1,8 +1,8 @@
 # OData V4 — Table Growth (ZAG_CL_ML_TABLE_GROWTH)
 
-Il servizio espone 3 entity set, ciascuno mappato 1:1 su un metodo pubblico di
-`ZAG_CL_ML_TABLE_GROWTH`. Non ci sono più le entity `Db02RamSize`/`Db02DiskSize`
-(basate su `ZML_CL_BSN_LOGIC`/DB02): sono state sostituite del tutto.
+Il servizio espone 3 entity set. Non ci sono più le entity
+`Db02RamSize`/`Db02DiskSize` (basate su `ZML_CL_BSN_LOGIC`/DB02): sono state
+sostituite del tutto.
 
 > Sostituisci `<SERVICE_URL>` con il path effettivo del servizio attivato in
 > `/IWFND/MAINT_SERVICE` (o equivalente per OData V4) sul tuo sistema —
@@ -14,13 +14,13 @@ Il servizio espone 3 entity set, ciascuno mappato 1:1 su un metodo pubblico di
 
 Metodo: `get_top_tables( xv_top_n )`
 
-| Campo (EDM)     | Tipo ABAP    | Note                                              |
-|-----------------|--------------|----------------------------------------------------|
-| TableName       | tabname      | chiave                                              |
-| SchemaName      | char30       |                                                      |
-| DiskBytes       | int8         | byte (HDB: `MEMORY_SIZE_IN_TOTAL`, MSS: `RESERVED`) |
-| RecCount        | int8         | record count corrente                               |
-| ModIndicator    | int8         | attività recente: delta bytes (HDB) / ROWMODCTR (MSS) |
+| Campo (EDM)  | Tipo ABAP | Note                                                   |
+|--------------|-----------|---------------------------------------------------------|
+| TableName    | tabname   | chiave                                                   |
+| SchemaName   | char30    |                                                           |
+| DiskBytes    | int8      | byte (HDB: `MEMORY_SIZE_IN_TOTAL`, MSS: `RESERVED`)      |
+| RecCount     | int8      | record count corrente                                    |
+| ModIndicator | int8      | attività recente: delta bytes (HDB) / ROWMODCTR (MSS)    |
 
 **Esempi:**
 
@@ -28,98 +28,124 @@ Metodo: `get_top_tables( xv_top_n )`
 GET <SERVICE_URL>/TopTables
 GET <SERVICE_URL>/TopTables?$top=10
 GET <SERVICE_URL>/TopTables?$orderby=DiskBytes desc
-GET <SERVICE_URL>/TopTables?$select=TableName,DiskBytes
 ```
 
 Note:
-- `$top` viene spinto come `xv_top_n` (limite lato query DB), quindi filtra
-  davvero quante righe la classe calcola — non è un semplice taglio a posteriori.
-- `$skip` non è gestito internamente: se lo usi, il framework pagina sul
-  risultato che la classe restituisce.
+- `$top` viene spinto come `xv_top_n` (limite lato query DB).
+- `$skip` non è gestito internamente: lo fa il framework sul risultato restituito.
 
 ---
 
-## 2. TableHistory — storico mensile (o snapshot MSS)
+## 2. TableGrowth — sintesi attuale (piatta)
 
-Metodo: `get_table_history( xt_table_name, xv_date_from, xv_date_to )`
+Metodo: `get_table_growth( xt_table_name, xv_top_n, xv_include_history = false )`
 
-| Campo (EDM)     | Tipo ABAP    | Note                                                |
-|-----------------|--------------|------------------------------------------------------|
-| TableName       | tabname      | chiave                                                |
-| SnapshotDate    | d            | chiave — 1° del mese (HDB) o data campione (MSS)      |
-| SchemaName      | char30       |                                                        |
-| RecordCount     | int8         | record del periodo (HDB) o totali a quella data (MSS) |
-| DiskBytes       | int8         | stima in byte (HDB) o dato reale (MSS)                |
+| Campo (EDM) | Tipo ABAP | Note   |
+|-------------|-----------|--------|
+| TableName   | tabname   | chiave |
+| SchemaName  | char30    |        |
+| DiskBytes   | int8      |        |
+| RecCount    | int8      |        |
 
 **Esempi:**
 
 ```
-GET <SERVICE_URL>/TableHistory?$filter=TableName eq 'VBAK'
-GET <SERVICE_URL>/TableHistory?$filter=TableName eq 'VBAK' or TableName eq 'MSEG'
-GET <SERVICE_URL>/TableHistory?$filter=TableName eq 'VBAK' and SnapshotDate ge 2024-01-01 and SnapshotDate le 2024-12-31
-GET <SERVICE_URL>/TableHistory
+GET <SERVICE_URL>/TableGrowth?$filter=TableName eq 'VBAK'
+GET <SERVICE_URL>/TableGrowth?$filter=TableName eq 'VBAK' or TableName eq 'BKPF'
+GET <SERVICE_URL>/TableGrowth
+GET <SERVICE_URL>/TableGrowth?$top=10
+GET <SERVICE_URL>/TableGrowth?$filter=TableName eq 'VBAK'&$expand=_History
+```
+
+**Storico delle prime N tabelle in una chiamata**: basta combinare `$top` con
+`$expand`, senza passare `$filter` su `TableName` — scatta il fallback sul
+top N e per ognuna delle tabelle risultanti arriva anche lo storico annidato:
+
+```
+GET <SERVICE_URL>/TableGrowth?$top=10&$expand=_History
 ```
 
 Note:
-- Se non passi `$filter` su `TableName`, la classe fa comunque un fallback
-  automatico: prende il top N (`get_top_tables`) e ne calcola lo storico —
-  quindi la chiamata senza filtro non va in errore, ma può essere pesante
-  (interroga N tabelle in sequenza).
-- Il filtro `SnapshotDate` supporta `ge`/`le`/`eq` singoli o combinati (viene
-  ridotto a due estremi `xv_date_from`/`xv_date_to` lato ABAP).
-- Su HDB serve un mapping tabella → campo data (`get_date_field_mapping`
-  nella classe): se una tabella non è mappata, torna un errore per quella
-  tabella specifica (`error_code = 'NM'`), le altre proseguono normalmente.
+- Chiama `get_table_growth` sempre con `xv_include_history = abap_false`:
+  qui serve solo la sintesi, lo storico si ottiene con `$expand=_History`
+  (vedi sotto) — niente query storiche inutili se non richieste.
+- Se non passi `$filter` su `TableName`, `get_table_growth` fa da sola il
+  fallback sul top N (`get_top_tables`), e `$top` viene spinto come `xv_top_n`
+  per controllare quante (di default 20 se non specificato).
+- `$top` è rilevante solo quando manca il `$filter` su `TableName`: se filtri
+  già per tabelle specifiche, `$top` non viene applicato (non ha senso "le
+  prime N" su un elenco che hai già scelto tu esplicitamente).
 
 ---
 
-## 3. TableSize — peso attuale di tabelle specifiche
+## 3. GrowthPoint — storico, raggiunto via `$expand=_History` da TableGrowth
 
-Metodo: `get_table_size( xt_table_name )`
+Entity separata (chiave `TableName` + `SnapshotDate`), collegata a
+`TableGrowth` con la navigation property `_History` (stesso pattern —
+verificato — di `Vendor → _Company`/`_Purchorg` in `ZAG_ODATAV4`).
 
-| Campo (EDM) | Tipo ABAP | Note    |
-|-------------|-----------|---------|
-| TableName   | tabname   | chiave  |
-| SchemaName  | char30    |         |
-| RecCount    | int8      |         |
-| DiskBytes   | int8      |         |
+| Campo (EDM)  | Tipo | Note                                     |
+|--------------|------|---------------------------------------------|
+| TableName    | tabname | chiave                                   |
+| SnapshotDate | d    | chiave — 1° del mese (HDB) o data campione (MSS) |
+| RecordCount  | int8 |                                               |
+| DiskBytes    | int8 |                                               |
 
-**Esempi:**
+**Esempio (nesting in un'unica chiamata):**
 
 ```
-GET <SERVICE_URL>/TableSize?$filter=TableName eq 'VBAK'
-GET <SERVICE_URL>/TableSize?$filter=TableName eq 'VBAK' or TableName eq 'BKPF'
-GET <SERVICE_URL>/TableSize
+GET <SERVICE_URL>/TableGrowth?$filter=TableName eq 'VBAK'&$expand=_History
 ```
 
-Note:
-- Stesso fallback di `TableHistory`: nessun filtro → prende il top N.
-- Su MSS non c'è una query "peso attuale" diretta: si usa l'ultimo snapshot
-  disponibile da `MSS_GET_TABHIST` (quello con `SnapshotDate` più recente).
+Risposta attesa:
+
+```json
+{
+  "TableName": "VBAK",
+  "SchemaName": "SAPHANADB",
+  "DiskBytes": 419430400,
+  "RecCount": 332579,
+  "_History": [
+    { "TableName": "VBAK", "SnapshotDate": "2024-01-01", "RecordCount": 12000, "DiskBytes": 4500000 },
+    { "TableName": "VBAK", "SnapshotDate": "2024-02-01", "RecordCount": 12500, "DiskBytes": 4700000 }
+  ]
+}
+```
+
+Accesso diretto all'entity set (senza passare da TableGrowth) è supportato
+filtrando per `TableName`/`SnapshotDate`:
+
+```
+GET <SERVICE_URL>/GrowthPoint?$filter=TableName eq 'VBAK' and SnapshotDate ge 2024-01-01
+```
+
+**Risposta reale di esempio**: vedi [`esempio-response.json`](esempio-response.json)
+— una `GET /TableGrowth?$filter=TableName eq 'VBAK'&$expand=_History` presa
+da un sistema vero, utile come riferimento per mockare i dati lato client.
 
 ---
 
-## Dati finti per test senza sistema reale
+## Come funziona `$expand` sotto al cofano
 
-In `ZML_IF_ODATAV4_ARCH_DATA` c'è `mock_data_table_history`, che genera 10
-anni di storico mensile con crescita lineare + stagionalità + rumore per un
-set fisso di tabelle (VBAK, VBAP, MARA, MARC, MKPF, MSEG). Per usarlo,
-in `read_list_table_history` decommenta:
+1. Il framework OData chiama `read_ref_target_key_data_list` su `TableGrowth`
+   per la tabella richiesta → `read_ref_key_list_table_growth` invoca
+   `get_table_growth(xv_include_history = abap_true)` per quella sola
+   tabella e restituisce le chiavi (`TableName`+`SnapshotDate`) di ogni
+   punto storico.
+2. Il framework richiama poi `read_entity_list` su `GrowthPoint` con quelle
+   chiavi → `read_list_growth_point` rifà la chiamata a `get_table_growth`
+   (per le tabelle richieste) e restituisce le righe piatte.
 
-```abap
-"TODO - simulazione: decommentare per usare dati finti invece del DB reale
-lt_growth = mock_data_table_history( is_filtri ).
-```
-
-subito dopo la chiamata a `get_table_history`.
+Nota: questo significa che per un `$expand` la storia viene calcolata due
+volte lato ABAP (una per risolvere le chiavi, una per i dati) — è il prezzo
+del pattern a navigation property; se diventa un problema di performance si
+può ottimizzare più avanti (es. cache per richiesta).
 
 ---
 
 ## Cosa NON è (ancora) gestito
 
 - Gli errori restituiti da `ZAG_CL_ML_TABLE_GROWTH` (`yt_errors`) vengono
-  raccolti ma **non sollevano un'eccezione** verso il chiamante OData: per
-  ora, se una tabella fallisce, semplicemente non compare nel risultato.
+  raccolti ma **non sollevano un'eccezione** verso il chiamante OData.
 - `read_entity` (GET su singola entity by key), `create_entity`,
-  `update_entity`, `delete_entity` restano stub vuoti (nessuna scrittura
-  prevista, solo lettura via `read_entity_list`).
+  `update_entity`, `delete_entity` restano stub vuoti.

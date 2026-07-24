@@ -1,0 +1,248 @@
+{
+  "@odata.context" : "$metadata#TableGrowth",
+  "@odata.metadataEtag" : "W/\"20260724171217\"",
+  "value" : [
+    {
+      "TableName" : "VBAK",
+      "SchemaName" : "SAPABAP1",
+      "DiskBytes" : 1239489,
+      "RecCount" : 1173,
+      "_History" : [
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2019-10-01",
+          "RecordCount" : 12,
+          "DiskBytes" : 12684
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2019-11-01",
+          "RecordCount" : 30,
+          "DiskBytes" : 31710
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2019-12-01",
+          "RecordCount" : 38,
+          "DiskBytes" : 40166
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2020-01-01",
+          "RecordCount" : 13,
+          "DiskBytes" : 13741
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2020-02-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2020-03-01",
+          "RecordCount" : 8,
+          "DiskBytes" : 8456
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2020-04-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2021-10-01",
+          "RecordCount" : 15,
+          "DiskBytes" : 15855
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2021-11-01",
+          "RecordCount" : 2,
+          "DiskBytes" : 2114
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2021-12-01",
+          "RecordCount" : 118,
+          "DiskBytes" : 124726
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-01-01",
+          "RecordCount" : 142,
+          "DiskBytes" : 150094
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-02-01",
+          "RecordCount" : 116,
+          "DiskBytes" : 122612
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-03-01",
+          "RecordCount" : 54,
+          "DiskBytes" : 57078
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-06-01",
+          "RecordCount" : 8,
+          "DiskBytes" : 8456
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-07-01",
+          "RecordCount" : 4,
+          "DiskBytes" : 4228
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-08-01",
+          "RecordCount" : 7,
+          "DiskBytes" : 7399
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-09-01",
+          "RecordCount" : 4,
+          "DiskBytes" : 4228
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-10-01",
+          "RecordCount" : 38,
+          "DiskBytes" : 40166
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-11-01",
+          "RecordCount" : 171,
+          "DiskBytes" : 180747
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2022-12-01",
+          "RecordCount" : 5,
+          "DiskBytes" : 5285
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2023-01-01",
+          "RecordCount" : 3,
+          "DiskBytes" : 3171
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2023-02-01",
+          "RecordCount" : 2,
+          "DiskBytes" : 2114
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2023-04-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2023-05-01",
+          "RecordCount" : 18,
+          "DiskBytes" : 19026
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2023-11-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-01-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-02-01",
+          "RecordCount" : 1,
+          "DiskBytes" : 1057
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-03-01",
+          "RecordCount" : 92,
+          "DiskBytes" : 97244
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-04-01",
+          "RecordCount" : 15,
+          "DiskBytes" : 15855
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-05-01",
+          "RecordCount" : 20,
+          "DiskBytes" : 21140
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2024-06-01",
+          "RecordCount" : 9,
+          "DiskBytes" : 9513
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-03-01",
+          "RecordCount" : 9,
+          "DiskBytes" : 9513
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-05-01",
+          "RecordCount" : 7,
+          "DiskBytes" : 7399
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-06-01",
+          "RecordCount" : 54,
+          "DiskBytes" : 57078
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-07-01",
+          "RecordCount" : 3,
+          "DiskBytes" : 3171
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-09-01",
+          "RecordCount" : 86,
+          "DiskBytes" : 90902
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2025-10-01",
+          "RecordCount" : 2,
+          "DiskBytes" : 2114
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2026-05-01",
+          "RecordCount" : 56,
+          "DiskBytes" : 59192
+        },
+        {
+          "TableName" : "VBAK",
+          "SnapshotDate" : "2026-07-01",
+          "RecordCount" : 6,
+          "DiskBytes" : 6342
+        }
+      ]
+    }
+  ]
+}

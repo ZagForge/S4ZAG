@@ -25,50 +25,51 @@ CLASS zml_cl_odatav4_arch_data DEFINITION
 
     ALIASES tc_entity_set_names  FOR zml_if_odatav4_arch~tc_entity_set_names .
     ALIASES tc_entity_type_names FOR zml_if_odatav4_arch~tc_entity_type_names .
+    ALIASES tc_nav_prop_names    FOR zml_if_odatav4_arch~tc_nav_prop_names .
 
-    ALIASES ts_table_history     FOR zml_if_odatav4_arch~ts_table_history .
-    ALIASES ts_table_size        FOR zml_if_odatav4_arch~ts_table_size .
     ALIASES ts_top_tables        FOR zml_if_odatav4_arch~ts_top_tables .
+    ALIASES ts_table_growth      FOR zml_if_odatav4_arch~ts_table_growth .
+    ALIASES ts_growth_point      FOR zml_if_odatav4_arch~ts_growth_point .
 
     METHODS read_list_top_tables
       IMPORTING
         !io_request        TYPE REF TO /iwbep/if_v4_requ_basic_list
         !io_response       TYPE REF TO /iwbep/if_v4_resp_basic_list
-        !iv_orderby_string TYPE string
-        !iv_where_clause   TYPE string
-        !iv_select_string  TYPE string
-        !is_filtri         TYPE zml_if_odatav4_arch=>ts_filters
-        !iv_skip           TYPE i
         !iv_top            TYPE i
         !is_done_list      TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list
       RAISING
         /iwbep/cx_gateway .
 
-    METHODS read_list_table_history
+    " TableGrowth: solo sintesi, piatta — lo storico si ottiene con
+    " $expand=_History (entity separata GrowthPoint).
+    METHODS read_list_table_growth
       IMPORTING
         !io_request        TYPE REF TO /iwbep/if_v4_requ_basic_list
         !io_response       TYPE REF TO /iwbep/if_v4_resp_basic_list
-        !iv_orderby_string TYPE string
-        !iv_where_clause   TYPE string
-        !iv_select_string  TYPE string
-        !is_filtri         TYPE zml_if_odatav4_arch=>ts_filters
-        !iv_skip           TYPE i
         !iv_top            TYPE i
+        !is_filtri         TYPE zml_if_odatav4_arch=>ts_filters
         !is_done_list      TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list
       RAISING
         /iwbep/cx_gateway .
 
-    METHODS read_list_table_size
+    " GrowthPoint: raggiunta di norma via $expand=_History da TableGrowth
+    " (chiavi risolte da READ_REF_KEY_LIST_TABLE_GROWTH), ma supporta anche
+    " accesso diretto filtrando per TableName/SnapshotDate.
+    METHODS read_list_growth_point
       IMPORTING
         !io_request        TYPE REF TO /iwbep/if_v4_requ_basic_list
         !io_response       TYPE REF TO /iwbep/if_v4_resp_basic_list
-        !iv_orderby_string TYPE string
-        !iv_where_clause   TYPE string
-        !iv_select_string  TYPE string
         !is_filtri         TYPE zml_if_odatav4_arch=>ts_filters
-        !iv_skip           TYPE i
-        !iv_top            TYPE i
         !is_done_list      TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list
+      RAISING
+        /iwbep/cx_gateway .
+
+    " Risolve le chiavi di GrowthPoint (TableName+SnapshotDate) raggiungibili
+    " da una data riga TableGrowth via la nav property _History.
+    METHODS read_ref_key_list_table_growth
+      IMPORTING
+        !io_request  TYPE REF TO /iwbep/if_v4_requ_basic_ref_l
+        !io_response TYPE REF TO /iwbep/if_v4_resp_basic_ref_l
       RAISING
         /iwbep/cx_gateway .
 
@@ -88,12 +89,6 @@ CLASS zml_cl_odatav4_arch_data DEFINITION
       EXPORTING
         !ev_date_from TYPE sy-datum
         !ev_date_to   TYPE sy-datum.
-
-    METHODS mock_data_table_history
-      IMPORTING
-        !is_filtri          TYPE zml_if_odatav4_arch=>ts_filters
-      RETURNING
-        VALUE(rt_mock_data) TYPE zml_if_odatav4_arch=>tt_table_history.
 ENDCLASS.
 
 
@@ -119,12 +114,7 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
 
   METHOD /iwbep/if_v4_dp_basic~read_entity_list.
 
-    DATA: lv_orderby_string TYPE string,
-          lv_skip           TYPE i,
-          lv_top            TYPE i,
-          lv_select_string  TYPE string,
-          lv_where_clause   TYPE string.
-
+    DATA: lv_top TYPE i.
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
           ls_done_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list VALUE IS INITIAL.
@@ -132,88 +122,25 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
     io_request->get_todos( IMPORTING es_todo_list = ls_todo_list ).
 
 
-    "Sort settings
+    " $top handling — solo TopTables lo spinge davvero come limite di query.
     "---------------------------------------------------------------
-    lv_orderby_string = 'PRIMARY KEY'.
-
-    IF ls_todo_list-process-orderby = abap_true.
-
-      io_request->get_orderby(
-        IMPORTING
-            et_orderby_property = DATA(lt_orderby_property)
-      ).
-
-      CLEAR lv_orderby_string.
-      LOOP AT lt_orderby_property ASSIGNING FIELD-SYMBOL(<ls_orderby_property>).
-
-        lv_orderby_string = COND #(
-            WHEN <ls_orderby_property>-descending EQ abap_false
-                THEN |{ lv_orderby_string } { <ls_orderby_property>-name } ASCENDING|
-
-            WHEN <ls_orderby_property>-descending EQ abap_true
-                THEN |{ lv_orderby_string } { <ls_orderby_property>-name } DESCENDING|
-        ).
-
-      ENDLOOP.
-
-      ls_done_list-orderby = abap_true.
-
-    ENDIF.
-
-
-    " $skip / $top handling
-    "---------------------------------------------------------------
-    " NB: qui leggiamo solo i valori richiesti dal client. Se e come vengono
-    " davvero applicati (done = abap_true) lo decide ogni READ_LIST_* in base
-    " a cosa sa effettivamente spingere verso ZAG_CL_ML_TABLE_GROWTH — non li
-    " marchiamo "fatti" a priori per non promettere una paginazione che poi
-    " non viene onorata.
-    lv_skip = 0. lv_top = 0.
-
-    IF ls_todo_list-process-skip = abap_true.
-      io_request->get_skip( IMPORTING ev_skip = lv_skip ).
-    ENDIF.
+    lv_top = 0.
 
     IF ls_todo_list-process-top = abap_true.
       io_request->get_top( IMPORTING ev_top = lv_top ).
     ENDIF.
 
 
-    " $select handling
-    "---------------------------------------------------------------
-    lv_select_string = '*'.
-
-    IF ls_todo_list-process-select = abap_true.
-
-      io_request->get_selected_properties(
-        IMPORTING
-            et_selected_property = DATA(lt_selected_property)
-      ).
-
-      CONCATENATE LINES OF lt_selected_property INTO lv_select_string SEPARATED BY ','.
-
-      ls_done_list-select = abap_true.
-
-    ENDIF.
-
-
     "$ filter handling
     "---------------------------------------------------------------
-    lv_where_clause = ''.
-
     DATA: ls_filtri TYPE zml_if_odatav4_arch=>ts_filters.
 
     IF ls_todo_list-process-filter = abap_true.
 
-      io_request->get_filter_osql_where_clause(
-        IMPORTING
-            ev_osql_where_clause = lv_where_clause
-      ).
-
       TRY.
           io_request->get_filter_ranges_for_prop(
             EXPORTING
-              iv_property_path = 'TABLE_NAME'    " TableHistory / TableSize
+              iv_property_path = 'TABLE_NAME'    " TableGrowth / GrowthPoint
             IMPORTING
               et_range         = ls_filtri-r_table_name
           ).
@@ -223,7 +150,7 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
       TRY.
           io_request->get_filter_ranges_for_prop(
             EXPORTING
-              iv_property_path = 'SNAPSHOT_DATE'    " solo TableHistory
+              iv_property_path = 'SNAPSHOT_DATE'    " solo GrowthPoint
             IMPORTING
               et_range         = ls_filtri-r_snapshot_date
           ).
@@ -246,43 +173,29 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
       WHEN tc_entity_set_names-internal-top_tables.
 
         read_list_top_tables(
-            io_request        = io_request
-            io_response       = io_response
-            iv_orderby_string = lv_orderby_string
-            iv_select_string  = lv_select_string
-            iv_where_clause   = lv_where_clause
-            is_filtri         = ls_filtri
-            iv_skip           = lv_skip
-            iv_top            = lv_top
-            is_done_list      = ls_done_list
+            io_request   = io_request
+            io_response  = io_response
+            iv_top       = lv_top
+            is_done_list = ls_done_list
         ).
 
-      WHEN tc_entity_set_names-internal-table_history.
+      WHEN tc_entity_set_names-internal-table_growth.
 
-        read_list_table_history(
-            io_request        = io_request
-            io_response       = io_response
-            iv_orderby_string = lv_orderby_string
-            iv_select_string  = lv_select_string
-            iv_where_clause   = lv_where_clause
-            is_filtri         = ls_filtri
-            iv_skip           = lv_skip
-            iv_top            = lv_top
-            is_done_list      = ls_done_list
+        read_list_table_growth(
+            io_request   = io_request
+            io_response  = io_response
+            iv_top       = lv_top
+            is_filtri    = ls_filtri
+            is_done_list = ls_done_list
         ).
 
-      WHEN tc_entity_set_names-internal-table_size.
+      WHEN tc_entity_set_names-internal-growth_point.
 
-        read_list_table_size(
-            io_request        = io_request
-            io_response       = io_response
-            iv_orderby_string = lv_orderby_string
-            iv_select_string  = lv_select_string
-            iv_where_clause   = lv_where_clause
-            is_filtri         = ls_filtri
-            iv_skip           = lv_skip
-            iv_top            = lv_top
-            is_done_list      = ls_done_list
+        read_list_growth_point(
+            io_request   = io_request
+            io_response  = io_response
+            is_filtri    = ls_filtri
+            is_done_list = ls_done_list
         ).
 
       WHEN OTHERS.
@@ -299,6 +212,29 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
 
 
   METHOD /iwbep/if_v4_dp_basic~read_ref_target_key_data_list.
+
+    io_request->get_source_entity_type(
+        IMPORTING
+            ev_source_entity_type_name = DATA(lv_source_entity_name)
+    ).
+
+    CASE lv_source_entity_name.
+      WHEN tc_entity_type_names-internal-table_growth.
+
+        read_ref_key_list_table_growth(
+            io_request  = io_request
+            io_response = io_response
+        ).
+
+      WHEN OTHERS.
+
+        super->/iwbep/if_v4_dp_basic~read_ref_target_key_data_list(
+            io_request  = io_request
+            io_response = io_response
+        ).
+
+    ENDCASE.
+
   ENDMETHOD.
 
 
@@ -336,108 +272,53 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD mock_data_table_history.
+  METHOD read_ref_key_list_table_growth.
 
     " ─────────────────────────────────────────────────────────────────
-    " Dati finti per test senza connessione a un sistema con dati reali.
-    " Stessa curva di crescita (lineare + stagionalità + rumore) del
-    " precedente generatore per DB02, adattata alla forma di TableHistory.
+    " $expand=_History: data una riga TableGrowth (chiave TableName),
+    " risolve le chiavi (TableName, SnapshotDate) di GrowthPoint raggiungibili.
     " ─────────────────────────────────────────────────────────────────
 
-    CONSTANTS: c_num_anni TYPE i VALUE 10,
-               c_num_mesi TYPE i VALUE 120.
+    DATA: ls_key_data TYPE ts_table_growth.
 
-    TYPES: BEGIN OF ty_table_cfg,
-             table_name   TYPE tabname,
-             start_gb     TYPE f,
-             growth_gb_yr TYPE f,
-             bytes_x_rec  TYPE i,
-           END OF ty_table_cfg.
+    DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_ref_l=>ty_s_todo_list         VALUE IS INITIAL,
+          ls_done_list TYPE /iwbep/if_v4_requ_basic_ref_l=>ty_s_todo_process_list VALUE IS INITIAL.
 
-    DATA: lt_table_cfg     TYPE TABLE OF ty_table_cfg,
-          ls_cfg           TYPE ty_table_cfg,
-          lv_year          TYPE i,
-          lv_month         TYPE i,
-          lv_start_year    TYPE i,
-          lv_date_start    TYPE d,
-          lv_mm            TYPE string,
-          lv_current_gb    TYPE f,
-          lv_rec_f         TYPE f,
-          lv_base_rec      TYPE i,
-          lv_seas_pct      TYPE i,
-          lv_noise_pct     TYPE i,
-          lv_raw_rec_count TYPE i,
-          lv_total_bytes   TYPE int8.
+    io_request->get_todos( IMPORTING es_todo_list = ls_todo_list ).
 
-    " ── Configurazione per tabella ────────────────────────────────────────
-    " start_gb = peso stimato a inizio serie, growth_gb_yr = GB/anno,
-    " bytes_x_rec = dimensione media record
-    lt_table_cfg = VALUE #(
-      ( table_name = 'VBAK' start_gb = '0.4'  growth_gb_yr = '0.20'  bytes_x_rec = 380 )
-      ( table_name = 'VBAP' start_gb = '1.2'  growth_gb_yr = '0.60'  bytes_x_rec = 250 )
-      ( table_name = 'MARA' start_gb = '0.3'  growth_gb_yr = '0.02'  bytes_x_rec = 1800 )
-      ( table_name = 'MARC' start_gb = '0.7'  growth_gb_yr = '0.05'  bytes_x_rec = 1200 )
-      ( table_name = 'MKPF' start_gb = '0.5'  growth_gb_yr = '0.28'  bytes_x_rec = 190 )
-      ( table_name = 'MSEG' start_gb = '1.8'  growth_gb_yr = '1.10'  bytes_x_rec = 520 )
+    IF ls_todo_list-process-source_key_data = abap_true.
+      io_request->get_source_key_data(
+        IMPORTING
+            es_source_key_data = ls_key_data
+      ).
+      ls_done_list-source_key_data = abap_true.
+    ENDIF.
+
+    DATA(lo_growth) = NEW zag_cl_ml_table_growth( ).
+
+    lo_growth->get_table_growth(
+      EXPORTING
+        xt_table_name      = VALUE #( ( ls_key_data-table_name ) )
+        xv_include_history = abap_true
+      IMPORTING
+        yt_growth          = DATA(lt_growth)
+        yt_errors          = DATA(lt_errors)
     ).
 
-    lv_start_year = sy-datum(4) - c_num_anni + 1.
+    DATA(lt_key_growth_point) = VALUE zml_if_odatav4_arch=>tt_growth_point(
+      FOR <g> IN lt_growth
+      FOR <h> IN <g>-history
+      ( table_name = ls_key_data-table_name snapshot_date = <h>-snapshot_date )
+    ).
 
-    DATA(lo_rand_noise) = cl_abap_random_int=>create( seed = cl_abap_random=>seed( )
-                                                        min  = 0
-                                                        max  = 100 ).
+    io_response->set_target_key_data( lt_key_growth_point ).
 
-    LOOP AT lt_table_cfg INTO ls_cfg.
-
-      CHECK ls_cfg-table_name IN is_filtri-r_table_name[].
-
-      DO c_num_mesi TIMES.
-
-        lv_month = ( sy-index - 1 ) MOD 12 + 1.
-        lv_year  = lv_start_year + ( sy-index - 1 ) DIV 12.
-
-        lv_mm         = |{ lv_month WIDTH = 2 ALIGN = RIGHT PAD = '0' }|.
-        lv_date_start = |{ lv_year }{ lv_mm }01|.
-
-        CHECK lv_date_start IN is_filtri-r_snapshot_date[].
-
-        lv_current_gb = ls_cfg-start_gb + ls_cfg-growth_gb_yr * ( sy-index - 1 ) / 12.
-        lv_rec_f      = lv_current_gb * 1073741824 / ls_cfg-bytes_x_rec.
-        lv_base_rec   = CONV i( lv_rec_f ).
-
-        CASE lv_month.
-          WHEN 1 OR 2.       lv_seas_pct = -8.
-          WHEN 3 OR 4.       lv_seas_pct = -3.
-          WHEN 5 OR 6 OR 7.  lv_seas_pct =  2.
-          WHEN 8.            lv_seas_pct =  5.
-          WHEN 9 OR 10.      lv_seas_pct =  8.
-          WHEN 11 OR 12.     lv_seas_pct = 15.
-        ENDCASE.
-
-        lv_noise_pct = lo_rand_noise->get_next( ).
-
-        lv_raw_rec_count = lv_base_rec
-                         + lv_base_rec * ( lv_noise_pct - 50 ) / 250
-                         + lv_base_rec * lv_seas_pct / 100.
-        IF lv_raw_rec_count < 1. lv_raw_rec_count = 1. ENDIF.
-
-        lv_total_bytes = CONV int8( lv_raw_rec_count * ls_cfg-bytes_x_rec ).
-
-        APPEND VALUE #(
-          table_name    = ls_cfg-table_name
-          snapshot_date = lv_date_start
-          record_count  = lv_raw_rec_count
-          disk_bytes    = lv_total_bytes
-        ) TO rt_mock_data.
-
-      ENDDO.
-
-    ENDLOOP.
+    io_response->set_is_done( ls_done_list ).
 
   ENDMETHOD.
 
 
-  METHOD read_list_table_history.
+  METHOD read_list_growth_point.
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
           ls_done_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list VALUE IS INITIAL.
@@ -448,22 +329,26 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
     ls_done_list-skip = abap_false.
     ls_done_list-top  = abap_false.
 
+    " Chiavi risolte via $expand (TableName+SnapshotDate) — se assenti si
+    " tratta di accesso diretto all'entity set, si usa il $filter su TableName.
+    DATA lt_key_growth_point TYPE STANDARD TABLE OF ts_growth_point.
+
+    IF ls_todo_list-process-key_data = abap_true.
+      io_request->get_key_data( IMPORTING et_key_data = lt_key_growth_point ).
+      ls_done_list-key_data = abap_true.
+    ENDIF.
+
+    DATA(lt_table_name) = COND zag_cl_ml_table_growth=>tt_tabname(
+      WHEN lt_key_growth_point IS NOT INITIAL
+      THEN VALUE #( FOR <key> IN lt_key_growth_point ( <key>-table_name ) )
+      ELSE get_table_names_from_range( is_filtri-r_table_name )
+    ).
+
+    SORT lt_table_name.
+    DELETE ADJACENT DUPLICATES FROM lt_table_name.
+
     CASE ls_todo_list-return-busi_data.
       WHEN abap_true.
-
-        DATA(lt_table_name) = get_table_names_from_range( is_filtri-r_table_name ).
-
-        DATA(lo_growth) = NEW zag_cl_ml_table_growth( ).
-
-        IF lt_table_name IS INITIAL.
-          " Nessun filtro su TableName: fallback sul top N per avere comunque un elenco
-          lo_growth->get_top_tables(
-            IMPORTING
-              yt_tables = DATA(lt_top)
-              yt_errors = DATA(lt_top_errors)
-          ).
-          lt_table_name = VALUE #( FOR <top> IN lt_top ( <top>-table_name ) ).
-        ENDIF.
 
         DATA(lv_date_from) = VALUE sy-datum( ).
         DATA(lv_date_to)   = VALUE sy-datum( ).
@@ -475,20 +360,31 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
             ev_date_to   = lv_date_to
         ).
 
-        lo_growth->get_table_history(
+        DATA(lo_growth) = NEW zag_cl_ml_table_growth( ).
+
+        " Filtro date spinto nella query storica stessa (XV_DATE_FROM/TO),
+        " non fatto qui in ABAP dopo aver scaricato tutto.
+        lo_growth->get_table_growth(
           EXPORTING
-            xt_table_name = lt_table_name
-            xv_date_from  = lv_date_from
-            xv_date_to    = lv_date_to
+            xt_table_name      = lt_table_name
+            xv_include_history = abap_true
+            xv_date_from       = lv_date_from
+            xv_date_to         = lv_date_to
           IMPORTING
-            yt_growth     = DATA(lt_growth)
-            yt_errors     = DATA(lt_errors)
+            yt_growth          = DATA(lt_growth)
+            yt_errors          = DATA(lt_errors)
         ).
 
-        "TODO - simulazione: decommentare per usare dati finti invece del DB reale
-*       lt_growth = mock_data_table_history( is_filtri ).
+        DATA(lt_points) = VALUE zml_if_odatav4_arch=>tt_growth_point(
+          FOR <g> IN lt_growth
+          FOR <h> IN <g>-history
+          ( table_name    = <g>-table_name
+            snapshot_date = <h>-snapshot_date
+            record_count  = <h>-record_count
+            disk_bytes    = <h>-disk_bytes )
+        ).
 
-        io_response->set_busi_data( it_busi_data = lt_growth ).
+        io_response->set_busi_data( it_busi_data = lt_points ).
     ENDCASE.
 
     io_response->set_is_done( ls_done_list ).
@@ -496,7 +392,7 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
   ENDMETHOD.
 
 
-  METHOD read_list_table_size.
+  METHOD read_list_table_growth.
 
     DATA: ls_todo_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_list         VALUE IS INITIAL,
           ls_done_list TYPE /iwbep/if_v4_requ_basic_list=>ty_s_todo_process_list VALUE IS INITIAL.
@@ -505,34 +401,42 @@ CLASS ZML_CL_ODATAV4_ARCH_DATA IMPLEMENTATION.
 
     ls_done_list = is_done_list.
     ls_done_list-skip = abap_false.
-    ls_done_list-top  = abap_false.
 
     CASE ls_todo_list-return-busi_data.
       WHEN abap_true.
 
+        " Elenco tabelle dal $filter; se vuoto GET_TABLE_GROWTH fa da sola
+        " il fallback sul top N (rilevante solo in questo caso: se il
+        " filtro elenca già le tabelle, $top qui non si applica).
         DATA(lt_table_name) = get_table_names_from_range( is_filtri-r_table_name ).
+
+        ls_done_list-top = COND #(
+          WHEN lt_table_name IS INITIAL AND iv_top > 0 THEN abap_true
+          ELSE abap_false ).
 
         DATA(lo_growth) = NEW zag_cl_ml_table_growth( ).
 
-        IF lt_table_name IS INITIAL.
-          " Nessun filtro su TableName: fallback sul top N per avere comunque un elenco
-          lo_growth->get_top_tables(
-            IMPORTING
-              yt_tables = DATA(lt_top)
-              yt_errors = DATA(lt_top_errors)
-          ).
-          lt_table_name = VALUE #( FOR <top> IN lt_top ( <top>-table_name ) ).
-        ENDIF.
-
-        lo_growth->get_table_size(
+        " Storico non richiesto qui: si ottiene con $expand=_History
+        " (entity separata GrowthPoint) — niente query storiche inutili.
+        lo_growth->get_table_growth(
           EXPORTING
-            xt_table_name = lt_table_name
+            xt_table_name      = lt_table_name
+            xv_top_n           = COND #( WHEN iv_top > 0 THEN iv_top ELSE 20 )
+            xv_include_history = abap_false
           IMPORTING
-            yt_sizes      = DATA(lt_sizes)
-            yt_errors     = DATA(lt_errors)
+            yt_growth          = DATA(lt_growth_full)
+            yt_errors          = DATA(lt_errors)
         ).
 
-        io_response->set_busi_data( it_busi_data = lt_sizes ).
+        DATA(lt_growth) = VALUE zml_if_odatav4_arch=>tt_table_growth(
+          FOR <g> IN lt_growth_full
+          ( table_name  = <g>-table_name
+            schema_name = <g>-schema_name
+            disk_bytes  = <g>-disk_bytes
+            rec_count   = <g>-rec_count )
+        ).
+
+        io_response->set_busi_data( it_busi_data = lt_growth ).
     ENDCASE.
 
     io_response->set_is_done( ls_done_list ).

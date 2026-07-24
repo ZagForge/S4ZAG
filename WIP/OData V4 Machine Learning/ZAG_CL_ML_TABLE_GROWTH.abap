@@ -6,13 +6,23 @@ class ZAG_CL_ML_TABLE_GROWTH definition
 public section.
 
   types:
-    " === Output unificato ===
-    BEGIN OF ts_table_growth,
-        table_name    TYPE tabname,
-        schema_name   TYPE char30,
+    " Singolo punto storico, annidato dentro TS_TABLE_GROWTH-HISTORY.
+    " Non ripete table_name/schema_name: sono già sulla riga radice.
+    BEGIN OF ts_growth_point,
         snapshot_date TYPE d,          " primo giorno del mese (YYYYMM01) su HDB, data campione su MSS
         record_count  TYPE int8,       " record inseriti nel periodo (HDB) o totali a quella data (MSS)
         disk_bytes    TYPE int8,       " stima in byte (HDB) o dato reale (MSS)
+      END OF ts_growth_point .
+  types:
+    tt_growth_point TYPE TABLE OF ts_growth_point WITH DEFAULT KEY .
+  types:
+    " === Output unificato di GET_TABLE_GROWTH: sintesi + storico annidato ===
+    BEGIN OF ts_table_growth,
+        table_name  TYPE tabname,
+        schema_name TYPE char30,
+        rec_count   TYPE int8,        " size attuale
+        disk_bytes  TYPE int8,        " size attuale
+        history     TYPE tt_growth_point, " vuoto se XV_INCLUDE_HISTORY = abap_false
       END OF ts_table_growth .
   types:
     tt_table_growth TYPE TABLE OF ts_table_growth WITH DEFAULT KEY .
@@ -51,11 +61,13 @@ public section.
     tt_table_size TYPE TABLE OF ts_table_size WITH DEFAULT KEY .
 
   methods CONSTRUCTOR .
-    " === Entry point combinato: top N + storico ===
+    " === Entry point combinato: sintesi (+ storico opzionale) di un elenco di
+    " tabelle note, o del top N se non ne passi nessuna ===
   methods GET_TABLE_GROWTH
     importing
       !XT_TABLE_NAME type TT_TABNAME optional         " se vuoto → top N
       !XV_TOP_N type I default 20
+      !XV_INCLUDE_HISTORY type ABAP_BOOL default ABAP_TRUE " false = solo size, niente query storiche
       !XV_DATE_FROM type SY-DATUM optional
       !XV_DATE_TO type SY-DATUM optional
     exporting
@@ -68,15 +80,6 @@ public section.
     exporting
       !YT_TABLES type TT_TOP_TABLE
       !YT_ERRORS type TT_ERROR .
-    " === Solo storico: crescita mensile per un elenco di tabelle note ===
-  methods GET_TABLE_HISTORY
-    importing
-      !XT_TABLE_NAME type TT_TABNAME
-      !XV_DATE_FROM type SY-DATUM optional
-      !XV_DATE_TO type SY-DATUM optional
-    exporting
-      !YT_GROWTH type TT_TABLE_GROWTH
-      !YT_ERRORS type TT_ERROR .
     " === Peso attuale di un elenco di tabelle note ===
   methods GET_TABLE_SIZE
     importing
@@ -85,6 +88,19 @@ public section.
       !YT_SIZES type TT_TABLE_SIZE
       !YT_ERRORS type TT_ERROR .
   PRIVATE SECTION.
+
+    " Riga storica piatta multi-tabella, uso interno di GET_TABLE_HISTORY:
+    " serve TABLE_NAME/SCHEMA_NAME per sapere a quale tabella appartiene ogni
+    " riga prima che GET_TABLE_GROWTH la raggruppi e la annidi in TS_GROWTH_POINT.
+    TYPES:
+      BEGIN OF ts_history_row,
+        table_name    TYPE tabname,
+        schema_name   TYPE char30,
+        snapshot_date TYPE d,
+        record_count  TYPE int8,
+        disk_bytes    TYPE int8,
+      END OF ts_history_row,
+      tt_history_row TYPE TABLE OF ts_history_row WITH DEFAULT KEY.
 
     " Mapping tabella → campo data (usato solo su HDB per query stimata)
     TYPES:
@@ -175,7 +191,6 @@ public section.
     METHODS get_top_n_tables_hdb
       IMPORTING
         xv_top_n  TYPE i
-        xv_schema TYPE char30
       EXPORTING
         yt_tables TYPE tt_top_table
         yt_errors TYPE tt_error.
@@ -190,7 +205,6 @@ public section.
     METHODS get_current_stats_hdb
       IMPORTING
         xv_table_name  TYPE tabname
-        xv_schema_name TYPE char30
       EXPORTING
         ys_stats       TYPE ts_hdb_cur_stats
         yt_errors      TYPE tt_error.
@@ -198,12 +212,11 @@ public section.
     METHODS get_history_hdb
       IMPORTING
         xv_table_name  TYPE tabname
-        xv_schema_name TYPE char30
         xv_date_field  TYPE fieldname
         xv_date_from   TYPE d OPTIONAL
         xv_date_to     TYPE d OPTIONAL
       EXPORTING
-        yt_growth      TYPE tt_table_growth
+        yt_growth      TYPE tt_history_row
         yt_errors      TYPE tt_error.
 
     METHODS get_history_mss
@@ -212,7 +225,18 @@ public section.
         xv_date_from  TYPE d OPTIONAL
         xv_date_to    TYPE d OPTIONAL
       EXPORTING
-        yt_growth     TYPE tt_table_growth
+        yt_growth     TYPE tt_history_row
+        yt_errors     TYPE tt_error.
+
+    " Storico piatto multi-tabella — usato solo internamente da GET_TABLE_GROWTH
+    " quando XV_INCLUDE_HISTORY = abap_true.
+    METHODS get_table_history
+      IMPORTING
+        xt_table_name TYPE tt_tabname
+        xv_date_from  TYPE sy-datum OPTIONAL
+        xv_date_to    TYPE sy-datum OPTIONAL
+      EXPORTING
+        yt_growth     TYPE tt_history_row
         yt_errors     TYPE tt_error.
 
     METHODS execute_hana_query
@@ -368,7 +392,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     get_current_stats_hdb(
       EXPORTING
         xv_table_name  = xv_table_name
-        xv_schema_name = xv_schema_name
       IMPORTING
         ys_stats       = DATA(ls_cur)
         yt_errors      = DATA(lt_stats_errors) ).
@@ -407,7 +430,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     lv_statement = |SELECT SUBSTRING({ xv_date_field }, 1, 6) AS MONTH_KEY, |
                    && |COUNT(*) AS RECORD_COUNT |
-                   && |FROM { xv_schema_name }.{ xv_table_name } |
+                   && |FROM { mv_schema }.{ xv_table_name } |
                    && |{ lv_where }|
                    && |GROUP BY SUBSTRING({ xv_date_field }, 1, 6) |
                    && |ORDER BY 1|.
@@ -433,9 +456,9 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     " ── 4. Mappa in et_growth ──────────────────────────────────
     LOOP AT lt_months INTO DATA(ls_month).
-      APPEND VALUE ts_table_growth(
+      APPEND VALUE ts_history_row(
         table_name    = xv_table_name
-        schema_name   = xv_schema_name
+        schema_name   = mv_schema
         snapshot_date = CONV d( ls_month-month_key && '01' )
         record_count  = ls_month-record_count
         disk_bytes    = ls_month-record_count * lv_bytes_per_row
@@ -485,7 +508,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       IF xv_date_from IS NOT INITIAL AND ls-sampledate < xv_date_from. CONTINUE. ENDIF.
       IF xv_date_to   IS NOT INITIAL AND ls-sampledate > xv_date_to.   CONTINUE. ENDIF.
 
-      APPEND VALUE ts_table_growth(
+      APPEND VALUE ts_history_row(
         table_name    = CONV #( ls-tablename )
         schema_name   = mv_schema
         snapshot_date = ls-sampledate
@@ -500,10 +523,12 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
   METHOD GET_TABLE_GROWTH.
     " ─────────────────────────────────────────────────────────────────
-    " ENTRY POINT COMBINATO — comodità: se non passi tabelle, prende il
-    " top N via GET_TOP_TABLES e ne calcola lo storico via GET_TABLE_HISTORY
+    " ENTRY POINT COMBINATO — per ogni tabella risolta (elenco esplicito,
+    " o top N via GET_TOP_TABLES se non ne passi nessuna): size attuale
+    " sempre, storico annidato in HISTORY solo se XV_INCLUDE_HISTORY = true.
     " ─────────────────────────────────────────────────────────────────
 
+    " ── 1. Risolvi elenco tabelle (fallback su top N se vuoto) ──────
     DATA lt_tables TYPE tt_tabname.
 
     IF xt_table_name IS NOT INITIAL.
@@ -522,31 +547,65 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     CHECK lt_tables IS NOT INITIAL.
 
-    DATA lt_history_errors TYPE tt_error.
-
-    get_table_history(
+    " ── 2. Size attuale per tutte le tabelle risolte ─────────────────
+    get_table_size(
       EXPORTING
         xt_table_name = lt_tables
-        xv_date_from  = xv_date_from
-        xv_date_to    = xv_date_to
       IMPORTING
-        yt_growth     = yt_growth
-        yt_errors     = lt_history_errors ).
+        yt_sizes      = DATA(lt_sizes)
+        yt_errors     = DATA(lt_size_errors) ).
 
-    APPEND LINES OF lt_history_errors TO yt_errors.
+    APPEND LINES OF lt_size_errors TO yt_errors.
+
+    " ── 3. Storico (opzionale) ───────────────────────────────────────
+    DATA lt_history TYPE tt_history_row.
+
+    IF xv_include_history = abap_true.
+      get_table_history(
+        EXPORTING
+          xt_table_name = lt_tables
+          xv_date_from  = xv_date_from
+          xv_date_to    = xv_date_to
+        IMPORTING
+          yt_growth     = lt_history
+          yt_errors     = DATA(lt_history_errors) ).
+
+      APPEND LINES OF lt_history_errors TO yt_errors.
+    ENDIF.
+
+    " ── 4. Assembla struttura annidata: size + storico raggruppato ───
+    SORT lt_history BY table_name snapshot_date.
+
+    LOOP AT lt_sizes INTO DATA(ls_size).
+
+      DATA(lt_points) = VALUE tt_growth_point(
+        FOR <h> IN lt_history WHERE ( table_name = ls_size-table_name )
+        ( snapshot_date = <h>-snapshot_date
+          record_count  = <h>-record_count
+          disk_bytes    = <h>-disk_bytes )
+      ).
+
+      APPEND VALUE ts_table_growth(
+        table_name  = ls_size-table_name
+        schema_name = ls_size-schema_name
+        rec_count   = ls_size-rec_count
+        disk_bytes  = ls_size-disk_bytes
+        history     = lt_points
+      ) TO yt_growth.
+
+    ENDLOOP.
 
   ENDMETHOD.
 
 
   METHOD GET_TABLE_HISTORY.
     " ─────────────────────────────────────────────────────────────────
-    " STORICO: crescita mensile per un elenco di tabelle note,
-    " indipendente da come sono state individuate (top N o input diretto)
+    " STORICO PIATTO MULTI-TABELLA — solo uso interno da GET_TABLE_GROWTH.
     " ─────────────────────────────────────────────────────────────────
 
     LOOP AT xt_table_name INTO DATA(lv_tabname).
 
-      DATA lt_growth TYPE tt_table_growth.
+      DATA lt_growth TYPE tt_history_row.
       DATA lt_errors TYPE tt_error.
 
       CASE mv_dbsys.
@@ -568,7 +627,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
           get_history_hdb(
             EXPORTING
               xv_table_name  = lv_tabname
-              xv_schema_name = mv_schema
               xv_date_field  = ls_map-date_field
               xv_date_from   = xv_date_from
               xv_date_to     = xv_date_to
@@ -618,7 +676,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       && |SUM(MEMORY_SIZE_IN_TOTAL) AS DISK_BYTES, |
       && |SUM(MEMORY_SIZE_IN_DELTA) AS DELTA_BYTES |
       && |FROM M_CS_TABLES |
-      && |WHERE SCHEMA_NAME = '{ xv_schema }' |
+      && |WHERE SCHEMA_NAME = '{ mv_schema }' |
       && |GROUP BY TABLE_NAME |
       && |ORDER BY SUM(MEMORY_SIZE_IN_TOTAL) DESC|.
 
@@ -644,7 +702,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     LOOP AT lt_result INTO DATA(ls).
       APPEND VALUE ts_top_table(
         table_name    = ls-table_name
-        schema_name   = xv_schema
+        schema_name   = mv_schema
         rec_count     = ls-rec_count
         disk_bytes    = ls-disk_bytes
         mod_indicator = ls-delta_bytes
@@ -729,7 +787,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
         get_top_n_tables_hdb(
           EXPORTING
             xv_top_n  = xv_top_n
-            xv_schema = mv_schema
           IMPORTING
             yt_tables = yt_tables
             yt_errors = yt_errors ).
@@ -767,7 +824,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       && |LAST_REPLAY_LOG_TIME, LAST_CONSISTENCY_CHECK_TIME, |
       && |READ_COUNT, WRITE_COUNT, MERGE_COUNT |
       && |FROM M_CS_TABLES |
-      && |WHERE SCHEMA_NAME = '{ xv_schema_name }' |
+      && |WHERE SCHEMA_NAME = '{ mv_schema }' |
       && |AND TABLE_NAME = '{ xv_table_name }'|.
 
     execute_hana_query(
@@ -808,7 +865,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
           get_current_stats_hdb(
             EXPORTING
               xv_table_name  = lv_tabname
-              xv_schema_name = mv_schema
             IMPORTING
               ys_stats       = DATA(ls_cur)
               yt_errors      = DATA(lt_stats_errors) ).
