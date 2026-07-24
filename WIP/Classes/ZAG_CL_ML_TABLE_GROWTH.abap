@@ -31,10 +31,10 @@ public section.
   types:
     " Lista tabelle top N (dimensione/record count correnti)
     BEGIN OF ts_top_table,
-        table_name  TYPE tabname,
-        schema_name TYPE char30,
-        disk_mb     TYPE p LENGTH 8 DECIMALS 2,
-        rec_count   TYPE int8,
+        table_name    TYPE tabname,
+        disk_mb       TYPE p LENGTH 8 DECIMALS 2,
+        rec_count     TYPE int8,
+        mod_indicator TYPE int8, " attività recente: ROWMODCTR (MSS) / delta bytes (HDB)
       END OF ts_top_table .
   types:
     tt_top_table TYPE TABLE OF ts_top_table WITH DEFAULT KEY .
@@ -79,9 +79,9 @@ public section.
     TYPES:
       BEGIN OF ts_hdb_top_result,
         table_name  TYPE char128,
-        schema_name TYPE char128,
         rec_count   TYPE int8,
         disk_bytes  TYPE int8,
+        delta_bytes TYPE int8,
       END OF ts_hdb_top_result,
       tt_hdb_top_result TYPE TABLE OF ts_hdb_top_result WITH DEFAULT KEY.
 
@@ -93,11 +93,34 @@ public section.
       END OF ts_month_count,
       tt_month_count TYPE TABLE OF ts_month_count WITH DEFAULT KEY.
 
-    " Stats correnti tabella HDB — ordine: REC_COUNT, DISK_BYTES
+    " Stats correnti tabella HDB (M_CS_TABLES) — l'ordine dei campi deve
+    " rispettare l'ordine del SELECT in GET_HISTORY_HDB.
+    " Solo numeriche/date: booleani e stringhe di stato esclusi.
+    " *_TIME come stringa: tipo timestamp HANA non verificato, un target
+    " string tollera qualsiasi tipo sorgente meglio di un target numerico.
     TYPES:
       BEGIN OF ts_hdb_cur_stats,
-        rec_count  TYPE int8,
-        disk_bytes TYPE int8,
+        rec_count                          TYPE int8,
+        disk_bytes                         TYPE int8,   " MEMORY_SIZE_IN_TOTAL
+        memory_size_in_main                TYPE int8,
+        memory_size_in_delta               TYPE int8,
+        memory_size_in_misc                TYPE int8,
+        est_max_memory_size_total          TYPE int8,   " ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL
+        last_estimated_memory_size         TYPE int8,
+        last_est_memory_size_time          TYPE string,  " LAST_ESTIMATED_MEMORY_SIZE_TIME
+        raw_record_count_in_main           TYPE int8,
+        raw_record_count_in_delta          TYPE int8,
+        last_compressed_record_count       TYPE int8,
+        max_udiv                           TYPE int8,
+        max_rowid                          TYPE int8,
+        create_time                        TYPE string,
+        modify_time                        TYPE string,
+        last_merge_time                    TYPE string,
+        last_replay_log_time               TYPE string,
+        last_consistency_check_time        TYPE string,
+        read_count                         TYPE int8,
+        write_count                        TYPE int8,
+        merge_count                        TYPE int8,
       END OF ts_hdb_cur_stats,
       tt_hdb_cur_stats TYPE TABLE OF ts_hdb_cur_stats WITH DEFAULT KEY.
 
@@ -301,10 +324,18 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     DATA lv_statement TYPE string.
 
-    lv_statement = |SELECT RECORD_COUNT, MEMORY_SIZE_IN_TOTAL | &&
-                   |FROM M_CS_TABLES | &&
-                   |WHERE SCHEMA_NAME = '{ xv_schema_name }' | &&
-                   |AND TABLE_NAME = '{ xv_table_name }'|.
+    lv_statement = |SELECT RECORD_COUNT, MEMORY_SIZE_IN_TOTAL, |
+                   && |MEMORY_SIZE_IN_MAIN, MEMORY_SIZE_IN_DELTA, MEMORY_SIZE_IN_MISC, |
+                   && |ESTIMATED_MAX_MEMORY_SIZE_IN_TOTAL, LAST_ESTIMATED_MEMORY_SIZE, |
+                   && |LAST_ESTIMATED_MEMORY_SIZE_TIME, |
+                   && |RAW_RECORD_COUNT_IN_MAIN, RAW_RECORD_COUNT_IN_DELTA, |
+                   && |LAST_COMPRESSED_RECORD_COUNT, MAX_UDIV, MAX_ROWID, |
+                   && |CREATE_TIME, MODIFY_TIME, LAST_MERGE_TIME, |
+                   && |LAST_REPLAY_LOG_TIME, LAST_CONSISTENCY_CHECK_TIME, |
+                   && |READ_COUNT, WRITE_COUNT, MERGE_COUNT |
+                   && |FROM M_CS_TABLES |
+                   && |WHERE SCHEMA_NAME = '{ xv_schema_name }' |
+                   && |AND TABLE_NAME = '{ xv_table_name }'|.
 
     execute_hana_query(
       EXPORTING
@@ -337,9 +368,9 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
       lv_conditions = |{ xv_date_field } >= '{ xv_date_from }'|.
     ENDIF.
     IF xv_date_to IS NOT INITIAL.
-      lv_conditions = |{ lv_conditions }| &&
-                      | { COND #( WHEN lv_conditions IS NOT INITIAL THEN 'AND' ELSE '' ) }| &&
-                      | { xv_date_field } <= '{ xv_date_to }'|.
+      lv_conditions = |{ lv_conditions }|
+                      && | { COND #( WHEN lv_conditions IS NOT INITIAL THEN 'AND' ELSE '' ) }|
+                      && | { xv_date_field } <= '{ xv_date_to }'|.
     ENDIF.
     DATA(lv_where) = COND string(
       WHEN lv_conditions IS NOT INITIAL
@@ -351,12 +382,12 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     DATA lr_months TYPE REF TO data.
     GET REFERENCE OF lt_months INTO lr_months.
 
-    lv_statement = |SELECT SUBSTRING({ xv_date_field }, 1, 6) AS MONTH_KEY, | &&
-                   |COUNT(*) AS RECORD_COUNT | &&
-                   |FROM { xv_schema_name }.{ xv_table_name } | &&
-                   |{ lv_where }| &&
-                   |GROUP BY SUBSTRING({ xv_date_field }, 1, 6) | &&
-                   |ORDER BY 1|.
+    lv_statement = |SELECT SUBSTRING({ xv_date_field }, 1, 6) AS MONTH_KEY, |
+                   && |COUNT(*) AS RECORD_COUNT |
+                   && |FROM { xv_schema_name }.{ xv_table_name } |
+                   && |{ lv_where }|
+                   && |GROUP BY SUBSTRING({ xv_date_field }, 1, 6) |
+                   && |ORDER BY 1|.
 
     execute_hana_query(
       EXPORTING
@@ -574,14 +605,15 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     " TOP N embedded come intero — nessun rischio injection
     DATA(lv_stmt) =
-      |SELECT TOP { xv_top_n } | &&
-      |TABLE_NAME, SCHEMA_NAME, | &&
-      |SUM(RECORD_COUNT) AS REC_COUNT, | &&
-      |SUM(MEMORY_SIZE_IN_TOTAL) AS DISK_BYTES | &&
-      |FROM M_CS_TABLES | &&
-      |WHERE SCHEMA_NAME = '{ xv_schema }' | &&
-      |GROUP BY TABLE_NAME, SCHEMA_NAME | &&
-      |ORDER BY SUM(MEMORY_SIZE_IN_TOTAL) DESC|.
+      |SELECT TOP { xv_top_n } |
+      && |TABLE_NAME, |
+      && |SUM(RECORD_COUNT) AS REC_COUNT, |
+      && |SUM(MEMORY_SIZE_IN_TOTAL) AS DISK_BYTES, |
+      && |SUM(MEMORY_SIZE_IN_DELTA) AS DELTA_BYTES |
+      && |FROM M_CS_TABLES |
+      && |WHERE SCHEMA_NAME = '{ xv_schema }' |
+      && |GROUP BY TABLE_NAME |
+      && |ORDER BY SUM(MEMORY_SIZE_IN_TOTAL) DESC|.
 
     execute_hana_query(
       EXPORTING
@@ -604,10 +636,10 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     LOOP AT lt_result INTO DATA(ls).
       APPEND VALUE ts_top_table(
-        table_name  = ls-table_name
-        schema_name = ls-schema_name
-        rec_count   = ls-rec_count
-        disk_mb     = ls-disk_bytes / 1024 / 1024
+        table_name    = ls-table_name
+        rec_count     = ls-rec_count
+        disk_mb       = ls-disk_bytes / 1024 / 1024
+        mod_indicator = ls-delta_bytes
       ) TO yt_tables.
     ENDLOOP.
 
@@ -618,7 +650,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     " ─────────────────────────────────────────────────────────────────
     " TOP N TABELLE — MSS (MSS_GET_TOP_N_TABLES, ORDER = 'L' → per dimensione)
     " Solo NUMBER e ORDER valorizzati, resto ai default della FM.
-    " MSSTOPLARGE non riporta lo schema: schema_name resta vuoto qui.
     " ─────────────────────────────────────────────────────────────────
 
     DATA: BEGIN OF ls_large,
@@ -669,9 +700,10 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
     LOOP AT lt_large INTO ls_large.
       APPEND VALUE ts_top_table(
-        table_name = ls_large-name
-        rec_count  = ls_large-rows
-        disk_mb    = ls_large-reserved / 1024  " KB → MB
+        table_name    = ls_large-name
+        rec_count     = ls_large-rows
+        disk_mb       = ls_large-reserved / 1024  " KB → MB
+        mod_indicator = ls_large-rowmodctr
       ) TO yt_tables.
     ENDLOOP.
 
@@ -707,11 +739,6 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
           IMPORTING
             yt_tables = yt_tables
             yt_errors = yt_errors ).
-
-        " MSSTOPLARGE non riporta lo schema: lo valorizziamo qui
-        LOOP AT yt_tables ASSIGNING FIELD-SYMBOL(<top>).
-          <top>-schema_name = lv_schema.
-        ENDLOOP.
     ENDCASE.
 
   ENDMETHOD.
