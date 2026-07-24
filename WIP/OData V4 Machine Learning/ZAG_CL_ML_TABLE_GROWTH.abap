@@ -9,6 +9,7 @@ public section.
     " === Output unificato ===
     BEGIN OF ts_table_growth,
         table_name    TYPE tabname,
+        schema_name   TYPE char30,
         snapshot_date TYPE d,          " primo giorno del mese (YYYYMM01) su HDB, data campione su MSS
         record_count  TYPE int8,       " record inseriti nel periodo (HDB) o totali a quella data (MSS)
         disk_bytes    TYPE int8,       " stima in byte (HDB) o dato reale (MSS)
@@ -31,6 +32,7 @@ public section.
     " Lista tabelle top N (dimensione/record count correnti)
     BEGIN OF ts_top_table,
         table_name    TYPE tabname,
+        schema_name   TYPE char30,
         disk_bytes    TYPE int8,
         rec_count     TYPE int8,
         mod_indicator TYPE int8, " attività recente: ROWMODCTR (MSS) / delta bytes (HDB)
@@ -40,9 +42,10 @@ public section.
   types:
     " Peso attuale di una o più tabelle specifiche (non solo top N)
     BEGIN OF ts_table_size,
-        table_name TYPE tabname,
-        rec_count  TYPE int8,
-        disk_bytes TYPE int8,
+        table_name  TYPE tabname,
+        schema_name TYPE char30,
+        rec_count   TYPE int8,
+        disk_bytes  TYPE int8,
       END OF ts_table_size .
   types:
     tt_table_size TYPE TABLE OF ts_table_size WITH DEFAULT KEY .
@@ -432,6 +435,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     LOOP AT lt_months INTO DATA(ls_month).
       APPEND VALUE ts_table_growth(
         table_name    = xv_table_name
+        schema_name   = xv_schema_name
         snapshot_date = CONV d( ls_month-month_key && '01' )
         record_count  = ls_month-record_count
         disk_bytes    = ls_month-record_count * lv_bytes_per_row
@@ -483,6 +487,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
       APPEND VALUE ts_table_growth(
         table_name    = CONV #( ls-tablename )
+        schema_name   = mv_schema
         snapshot_date = ls-sampledate
         record_count  = ls-totalrows         " righe totali a quella data (reale)
         disk_bytes    = ls-reserved * 1024   " KB → byte, come MSSTOPLARGE-RESERVED
@@ -639,6 +644,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     LOOP AT lt_result INTO DATA(ls).
       APPEND VALUE ts_top_table(
         table_name    = ls-table_name
+        schema_name   = xv_schema
         rec_count     = ls-rec_count
         disk_bytes    = ls-disk_bytes
         mod_indicator = ls-delta_bytes
@@ -703,6 +709,7 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
     LOOP AT lt_large INTO ls_large.
       APPEND VALUE ts_top_table(
         table_name    = ls_large-name
+        schema_name   = mv_schema
         rec_count     = ls_large-rows
         disk_bytes    = ls_large-reserved * 1024  " KB → byte
         mod_indicator = ls_large-rowmodctr
@@ -810,9 +817,10 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
 
           IF lt_stats_errors IS INITIAL.
             APPEND VALUE ts_table_size(
-              table_name = lv_tabname
-              rec_count  = ls_cur-rec_count
-              disk_bytes = ls_cur-disk_bytes
+              table_name  = lv_tabname
+              schema_name = mv_schema
+              rec_count   = ls_cur-rec_count
+              disk_bytes  = ls_cur-disk_bytes
             ) TO yt_sizes.
           ENDIF.
 
@@ -830,9 +838,10 @@ CLASS ZAG_CL_ML_TABLE_GROWTH IMPLEMENTATION.
             SORT lt_hist BY snapshot_date DESCENDING.
             READ TABLE lt_hist INTO DATA(ls_latest) INDEX 1.
             APPEND VALUE ts_table_size(
-              table_name = lv_tabname
-              rec_count  = ls_latest-record_count
-              disk_bytes = ls_latest-disk_bytes
+              table_name  = lv_tabname
+              schema_name = ls_latest-schema_name
+              rec_count   = ls_latest-record_count
+              disk_bytes  = ls_latest-disk_bytes
             ) TO yt_sizes.
           ENDIF.
 
