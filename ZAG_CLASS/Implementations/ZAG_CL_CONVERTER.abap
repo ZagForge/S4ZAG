@@ -406,7 +406,8 @@ CLASS zag_cl_converter IMPLEMENTATION.
 *    So, in this case, the number will be converted in SAP Format -> 100.257
 
     DATA: lv_count TYPE i,
-          lv_sign.
+          lv_sign,
+          lv_strlen TYPE i.
 
     "---------------------------------------------------------------
 
@@ -419,6 +420,9 @@ CLASS zag_cl_converter IMPLEMENTATION.
 
     CONDENSE lv_numb_int NO-GAPS.
     TRANSLATE lv_numb_int TO UPPER CASE.
+
+    lv_strlen = strlen( lv_numb_int ).
+    DATA(lv_offs_last_ch) = lv_strlen - 1.
 
 
     "Find special chars occurrences
@@ -444,6 +448,14 @@ CLASS zag_cl_converter IMPLEMENTATION.
     IF lv_numb_int CN tc_symbols-exp_notation.
       RAISE plausibility_error.
     ENDIF.
+
+    IF lv_numb_int(1) EQ '.'
+      OR lv_numb_int(1) EQ ','
+      OR lv_numb_int+lv_offs_last_ch(1) EQ '.'
+      OR lv_numb_int+lv_offs_last_ch(1) EQ ','.
+      RAISE plausibility_error.
+    ENDIF.
+
 
     IF lv_counter_plus    GT 1
       OR lv_counter_minus GT 2 "Allowed double '-' in Exp notation
