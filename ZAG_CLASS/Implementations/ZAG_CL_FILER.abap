@@ -117,10 +117,11 @@ CLASS zag_cl_filer DEFINITION
     METHODS:
       init_instance
         IMPORTING
-          !xv_filename TYPE string
-          !xv_header   TYPE abap_char1    DEFAULT abap_true
+          !xv_filename  TYPE string
+          !xv_header    TYPE abap_char1    DEFAULT abap_true
+          !xv_separator TYPE c OPTIONAL
         CHANGING
-          !yref_tsap   TYPE REF TO data
+          !yref_tsap    TYPE REF TO data
         RAISING
           cx_ai_system_fault,
 
